@@ -1,0 +1,51 @@
+[project]
+name = "beschess"
+version = "0.1.0"
+description = "Add your description here"
+authors = [ ]
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "python-chess>=1.999",
+    "scipy>=1.16.2",
+    "seaborn>=0.13.2",
+    "stockfish>=3.28.0",
+]
+[dependency-groups]
+dev = [
+	"jupyterlab",
+	"jupyterlab-lsp",
+	"jupyterlab-vim",
+	"pyright>=1.1.406",
+	"python-lsp-server[all]",
+	"notebook-intelligence",
+]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/beschess"]
+
+[tool.ruff]
+line-length = 88
+exclude=[
+    ".eggs",
+    ".git",
+    ".mypy_cache",
+    ".vscode",
+    "__pycache__",
+    "build",
+    "dist",
+    "sklearn/externals",
+    "doc/_build",
+    "doc/auto_examples",
+    "asv_benchmarks/env",
+    "asv_benchmarks/html",
+    "asv_benchmarks/results",
+    "asv_benchmarks/benchmarks/cache",
+]
