@@ -4,6 +4,16 @@ from pathlib import Path
 import pandas as pd
 
 
+def get_n_games_pgn(fname: str | Path) -> int:
+    n_games = 0
+    with open(fname, "r") as games_f:
+        while line := games_f.readline():
+            if line.startswith("[Event "):
+                n_games += 1
+
+    return n_games
+
+
 def load_games_pgn(fname: str | Path) -> Generator[pgn.Game]:
     with open(fname, "r") as games_f:
         while game := pgn.read_game(games_f):

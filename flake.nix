@@ -25,8 +25,25 @@
               pkgs.stockfish
             ];
 
-            LD_LIBRARY_PATH = [
-              "$LD_LIBRARY_PATH:${pkgs.stdenv.cc.cc.lib}/lib"
+            LD_LIBRARY_PATH = lib.makeLibraryPath [
+              pkgs.stdenv.cc.cc.lib
+              pkgs.zlib
+            ];
+
+            STOCKFISH_PATH = "${pkgs.stockfish}/bin/stockfish";
+
+            shellHook = ''
+              unset PYTHONPATH
+              uv sync
+              . .venv/bin/activate
+            '';
+          };
+
+          hpc = pkgs.mkShell {
+            packages = [
+              pkgs.python3
+              pkgs.uv
+              pkgs.stockfish
             ];
 
             STOCKFISH_PATH = "${pkgs.stockfish}/bin/stockfish";
