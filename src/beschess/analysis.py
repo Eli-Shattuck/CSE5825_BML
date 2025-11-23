@@ -1,8 +1,57 @@
 import chess
 import chess.pgn
+import chess.engine
 import os
-from stockfish import Stockfish
+from stockfish import Stockfish as LegacyStockfish
 from typing import Generator, Tuple
+from dataclasses import dataclass
+import logging
+
+
+@dataclass
+class StockFishConfig:
+    depth: int = 12
+    threads: int = 8
+
+
+class StockFish:
+    instance: chess.engine.SimpleEngine
+    config: StockFishConfig
+
+    def __init__(self, config: StockFishConfig = StockFishConfig()):
+        self.config = config
+        stockfish_path = os.getenv("STOCKFISH_PATH") or "/usr/local/bin/stockfish"
+        self.instance = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+        self.instance.configure({"Threads": self.config.threads})
+
+    def quit(self):
+        self.instance.quit()
+
+
+def is_puzzle(
+    stockfish: StockFish,
+    board: chess.Board,
+    amax_cp: int,
+    amax_cp_diff: int,
+):
+    info = stockfish.instance.analyse(
+        board,
+        chess.engine.Limit(depth=stockfish.config.depth),
+        multipv=2,
+    )
+
+    if len(info) < 2:
+        return False
+
+    s1 = info[0]["score"].relative.score(mate_score=10000)
+    s2 = info[1]["score"].relative.score(mate_score=10000)
+
+    logging.info(f"Score 1: {s1}, Score 2: {s2}")
+
+    return abs(s1) >= amax_cp and abs(s2 - s1) >= amax_cp_diff
+
+
+# --- LEGACY STOCKFISH ANALYSIS FUNCTION ---
 
 
 def engine_analysis(
@@ -11,7 +60,7 @@ def engine_analysis(
 ) -> Generator[Tuple[Tuple[str, str], int, chess.Move, int]]:
     # --- 1. INITIALIZE STOCKFISH ---
     try:
-        stockfish = Stockfish(
+        stockfish = LegacyStockfish(
             path=os.getenv("STOCKFISH_PATH") or "/usr/local/bin/stockfish",
             depth=depth,
         )

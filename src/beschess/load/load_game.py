@@ -1,7 +1,15 @@
-from chess import pgn
-from typing import Generator, List
+import io
+import sys
 from pathlib import Path
+from typing import Generator, List
+
 import pandas as pd
+from chess import pgn
+
+if sys.version_info >= (3, 14):
+    from compression import zstd
+else:
+    from backports import zstd
 
 
 def get_n_games_pgn(fname: str | Path) -> int:
@@ -22,6 +30,13 @@ def load_games_pgn(fname: str | Path) -> Generator[pgn.Game]:
 
 def load_games_csv(fname: str | Path) -> pd.DataFrame:
     raise NotImplementedError("not implemented")
+
+
+def load_game_zstd(fname: str | Path) -> Generator[pgn.Game]:
+    with zstd.open(fname, "rb") as reader:
+        with io.TextIOWrapper(reader, encoding="utf-8") as pgn_file:
+            while game := pgn.read_game(pgn_file):
+                yield game
 
 
 def load_headers_pgn(fname: str | Path) -> Generator[pgn.Headers]:

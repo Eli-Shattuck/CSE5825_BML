@@ -1,6 +1,12 @@
 from typing import Generator, List
 from pathlib import Path
 import pandas as pd
+import sys
+
+if sys.version_info >= (3, 14):
+    from compression import zstd
+else:
+    from backports import zstd
 
 
 def puzzle_csv_iterator_pd(
