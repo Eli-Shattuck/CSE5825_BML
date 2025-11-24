@@ -3,10 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixgl.url = "github:guibou/nixGL";
   };
 
   outputs =
-    { nixpkgs, ... }:
+    { nixpkgs, nixgl, ... }:
     let
       inherit (nixpkgs) lib;
       forAllSystems = lib.genAttrs lib.systems.flakeExposed;
@@ -15,7 +16,13 @@
       devShells = forAllSystems (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
+          pkgs = import nixpkgs {
+            inherit system;
+            config = {
+              allowUnfree = true;
+            };
+            overlays = [ nixgl.overlay ];
+          };
         in
         {
           default = pkgs.mkShell {
@@ -44,6 +51,12 @@
               pkgs.python3
               pkgs.uv
               pkgs.stockfish
+              pkgs.nixgl.auto.nixGLDefault
+            ];
+
+            LD_LIBRARY_PATH = lib.makeLibraryPath [
+              pkgs.stdenv.cc.cc.lib
+              pkgs.zlib
             ];
 
             STOCKFISH_PATH = "${pkgs.stockfish}/bin/stockfish";
