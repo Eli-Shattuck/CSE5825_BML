@@ -10,7 +10,8 @@ import logging
 
 @dataclass
 class StockFishConfig:
-    depth: int = 12
+    depth: int | None = None
+    nodes: int | None = None
     threads: int = 8
 
 
@@ -22,6 +23,10 @@ class StockFish:
         self.config = config
         stockfish_path = os.getenv("STOCKFISH_PATH") or "/usr/local/bin/stockfish"
         self.instance = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+
+        if "Use NNUE" in self.instance.options:
+            self.instance.configure({"Use NNUE": True})
+
         self.instance.configure({"Threads": self.config.threads})
 
     def quit(self):
@@ -34,9 +39,19 @@ def is_puzzle(
     amax_cp: int,
     amax_cp_diff: int,
 ):
+    if stockfish.config.depth is None or stockfish.config.nodes is None:
+        raise ValueError("Either depth or nodes must be specified in StockFishConfig.")
+
+    if stockfish.config.depth is not None:
+        limit = chess.engine.Limit(depth=stockfish.config.depth)
+    elif stockfish.config.nodes > 0:
+        limit = chess.engine.Limit(nodes=stockfish.config.nodes)
+    else:
+        raise ValueError("Either depth or nodes must be greater than zero.")
+
     info = stockfish.instance.analyse(
         board,
-        chess.engine.Limit(depth=stockfish.config.depth),
+        limit,
         multipv=2,
     )
 

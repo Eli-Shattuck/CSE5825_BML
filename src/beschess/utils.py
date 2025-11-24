@@ -54,3 +54,23 @@ def packed_to_tensor(packed_array):
         tensor[piece_index, row, col] = 1
 
     return tensor
+
+
+def tensor_to_board(tensor):
+    """Reconstructs a chess.Board from the (12, 8, 8) tensor representation"""
+
+    board = chess.Board(None)
+    board.clear()
+
+    for piece_index in range(12):
+        positions = np.argwhere(tensor[piece_index] == 1)
+        for pos in positions.T:
+            row, col = pos
+            sq = row * 8 + col
+            if piece_index < 6:
+                piece = chess.Piece(piece_index + 1, chess.WHITE)
+            else:
+                piece = chess.Piece(piece_index - 5, chess.BLACK)
+            board.set_piece_at(sq, piece)
+
+    return board

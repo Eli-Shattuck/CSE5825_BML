@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.preprocessing import MultiLabelBinarizer
 from tqdm import tqdm
 
-from beschess.packed import board_to_packed
+from beschess.utils import board_to_packed
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data"
 

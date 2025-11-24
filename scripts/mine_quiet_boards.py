@@ -1,20 +1,11 @@
-import sys
 from pathlib import Path
 
-import chess
-import chess.pgn
 import numpy as np
-from pandas.io.pytables import DataCol
 from tqdm import tqdm
-from beschess.packed import board_to_packed
+from beschess.utils import board_to_packed
 
 from beschess.analysis import StockFish, StockFishConfig, is_puzzle
 from beschess.load.load_game import load_game_zstd
-
-if sys.version_info >= (3, 14):
-    from compression import zstd
-else:
-    from backports import zstd
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data"
 
@@ -30,7 +21,7 @@ MAX_ply = 80
 
 def mine_quiet_boards(pgn_path, output_path, total=None):
     try:
-        stockfish = StockFish(StockFishConfig(depth=12, threads=16))
+        stockfish = StockFish(StockFishConfig(nodes=5000, threads=16))
 
         boards_packed = np.zeros((TARGET_SAMPLES, 64), dtype=np.int8)
         boards_sampled = 0
@@ -109,6 +100,7 @@ def mine_quiet_boards(pgn_path, output_path, total=None):
         stockfish.quit()
         print(f"Mined {boards_sampled} quiet boards.")
         np.save(output_path, boards_packed[:boards_sampled])
+        puzzle_bar.close()
     except Exception as e:
         stockfish.quit()
         raise e
