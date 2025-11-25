@@ -34,7 +34,7 @@ class PuzzleDataset(torch.utils.data.Dataset):
             board_packed = self.puzzle_boards[rel_idx]
             puzzle_label = self.puzzle_labels[rel_idx]
 
-            label[1:] = torch.from_numpy(puzzle_label).float()
+            label[1:] = torch.from_numpy(puzzle_label.copy()).float()
 
         board_unpacked = packed_to_tensor(board_packed)
         board_tensor = torch.from_numpy(board_unpacked.copy()).float()
@@ -226,7 +226,11 @@ class DirectLoader:
         return len(self.sampler)
 
 
-def generate_split_indices(dataset, val_split=0.05, test_split=0.05):
+def generate_split_indices(
+    dataset: PuzzleDataset,
+    val_split: float = 0.05,
+    test_split: float = 0.05,
+) -> dict[str, tuple[list, list]]:
     n_quiet = dataset.n_quiet
     n_total = len(dataset)
 
