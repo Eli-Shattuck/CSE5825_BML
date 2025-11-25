@@ -43,14 +43,14 @@ quiet_boards_file = DATA_DIR / "quiet_boards_preeval.npy"
 puzzle_boards_file = DATA_DIR / "boards_packed.npy"
 puzzle_labels_file = DATA_DIR / "tags_packed.npy"
 
-# quiet_boards = np.load(quiet_boards_file, mmap_mode="r")
-# puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")
-# puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")
+quiet_boards = np.load(quiet_boards_file, mmap_mode="r")
+puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")
+puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")
 
 # subset for quick testing
-quiet_boards = np.load(quiet_boards_file, mmap_mode="r")[:100000]
-puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")[:100000]
-puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")[:100000]
+# quiet_boards = np.load(quiet_boards_file, mmap_mode="r")[:100000]
+# puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")[:100000]
+# puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")[:100000]
 
 dataset = PuzzleDataset(
     quiet_boards=quiet_boards,

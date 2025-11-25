@@ -65,6 +65,7 @@
               unset PYTHONPATH
               uv sync
               . .venv/bin/activate
+              export LD_PRELOAD=/lib64/libcuda.so.1
             '';
           };
         }
