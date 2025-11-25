@@ -1,4 +1,5 @@
 from pathlib import Path
+import matplotlib.patches as mpatches
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -133,16 +134,21 @@ def compute_tsne_embeddings(
 
     model.train(model_is_train)
 
-    all_embeddings = torch.cat(all_embeddings, dim=0)[:n_samples].numpy()
+    all_embeddings = torch.cat(all_embeddings, dim=0)[:n_samples]
+    all_embeddings = F.normalize(all_embeddings, p=2, dim=1).numpy()
     all_labels = torch.cat(all_labels, dim=0)[:n_samples].numpy()
 
     proxies = F.normalize(loss_fn.proxies.detach().cpu(), p=2, dim=1).numpy()
     proxy_labels = np.arange(proxies.shape[0])
 
     X = np.vstack([all_embeddings, proxies])
-    tsne_model = TSNE(n_components=2, random_state=42)
+    tsne_model = TSNE(
+        n_components=2,
+        init="pca",
+        random_state=42,
+    )
 
-    X_embedded = tsne_model.fit_transform(X).asarray()
+    X_embedded = tsne_model.fit_transform(X)
     embeddings_2d = X_embedded[:n_samples, :]
     proxies_2d = X_embedded[n_samples:, :]
 
@@ -153,50 +159,112 @@ def plot_tsne_embeddings(
     embeddings_2d: np.ndarray,
     labels: np.ndarray,
     proxies_2d: np.ndarray,
-    proxy_labels: np.ndarray,
-    title: str = "t-SNE Embeddings",
+    title: str = "Latent Space",
 ):
-    fig, ax = plt.subplots(figsize=(10, 10))
-    scatter = ax.scatter(
-        embeddings_2d[:, 0],
-        embeddings_2d[:, 1],
-        c=np.argmax(labels, axis=1),
-        cmap="tab20",
-        alpha=0.6,
-        s=10,
+    """
+    Visualizes t-SNE results using 'Jittered Ghost Points' to show multi-label overlaps.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(20, 10))
+    cmap = plt.get_cmap("tab20")
+
+    # === PLOT A: Ghost Points (Multi-Label Detail) ===
+    ax = axes[0]
+
+    # 1. Plot Quiet Background (Index 0)
+    quiet_mask = labels[:, 0] == 1
+    ax.scatter(
+        embeddings_2d[quiet_mask, 0],
+        embeddings_2d[quiet_mask, 1],
+        c="lightgray",
+        s=20,
+        alpha=0.3,
+        label="Quiet",
+        edgecolors="none",
     )
-    for i, proxy_point in enumerate(proxies_2d):
-        ax.scatter(
-            proxy_point[0],
-            proxy_point[1],
-            c="black",
-            marker="X",
-            s=200,
-            edgecolors="white",
-            linewidths=1.5,
-        )
+
+    # 2. Decompose Multi-Label Puzzles (Indices 1-15)
+    # np.nonzero returns (row_indices, col_indices)
+    # We only look at columns 1-15 (Tactical tags)
+    tactical_rows, tactical_cols = np.nonzero(labels[:, 1:])
+
+    # Adjust col index to match global tag index (0=Quiet, so Col 0 -> Tag 1)
+    tactical_tags = tactical_cols + 1
+
+    # 3. Apply Jitter
+    # We add random noise to separate the ghost points
+    jitter_strength = 0.5
+    jitter_x = np.random.uniform(
+        -jitter_strength, jitter_strength, size=len(tactical_rows)
+    )
+    jitter_y = np.random.uniform(
+        -jitter_strength, jitter_strength, size=len(tactical_rows)
+    )
+
+    # Plot the Ghost Cloud
+    ax.scatter(
+        embeddings_2d[tactical_rows, 0] + jitter_x,
+        embeddings_2d[tactical_rows, 1] + jitter_y,
+        c=tactical_tags,
+        cmap=cmap,
+        vmin=0,
+        vmax=19,  # Consistent color mapping with tab20
+        s=10,
+        alpha=0.6,
+        edgecolors="none",
+    )
+
+    # 4. Plot Proxies
+    for i, p in enumerate(proxies_2d):
+        ax.scatter(p[0], p[1], c="black", marker="X", s=150, zorder=10)
+        # Add text with box for readability
         ax.text(
-            proxy_point[0],
-            proxy_point[1],
-            TAG_NAMES[proxy_labels[i]],
+            p[0],
+            p[1],
+            TAG_NAMES[i],
             fontsize=9,
             fontweight="bold",
             ha="center",
             va="center",
-            color="white",
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.8),
         )
 
-    legend1 = ax.legend(
-        *scatter.legend_elements(num=16),
-        title="Tags",
-        loc="upper right",
-    )
-    ax.add_artist(legend1)
-    plt.title(title)
-    plt.xlabel("t-SNE Dimension 1")
-    plt.ylabel("t-SNE Dimension 2")
-    plt.grid(True)
+    ax.set_title(f"{title}: Ghost Points (Multi-Label)")
+    ax.grid(True, alpha=0.3)
 
+    # === PLOT B: Complexity Map (Cardinality) ===
+    ax2 = axes[1]
+
+    # Count active tags per puzzle
+    tag_counts = labels.sum(axis=1)
+
+    # Color scheme: 1=Blue, 2=Gold, 3+=Red
+    tag_counts_capped = np.clip(tag_counts, 1, 3).astype(int)
+    colors = np.array(
+        ["#A0A0A0", "cornflowerblue", "gold", "crimson"]
+    )  # 0(N/A), 1, 2, 3
+
+    # Map counts to colors
+    point_colors = colors[tag_counts_capped]
+
+    ax2.scatter(
+        embeddings_2d[:, 0], embeddings_2d[:, 1], c=point_colors, s=15, alpha=0.5
+    )
+
+    # Add Proxies to Plot B for reference
+    ax2.scatter(proxies_2d[:, 0], proxies_2d[:, 1], c="black", marker="X", s=100)
+
+    # Legend for B
+    handles = [
+        mpatches.Patch(color="cornflowerblue", label="1 Tag"),
+        mpatches.Patch(color="gold", label="2 Tags"),
+        mpatches.Patch(color="crimson", label="3+ Tags"),
+        mpatches.Patch(color="lightgray", label="Quiet (1 Tag)"),
+    ]
+    ax2.legend(handles=handles)
+    ax2.set_title(f"{title}: Cardinality Map")
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
     return fig
 
 
@@ -321,31 +389,6 @@ def evaluate_knn_cos(
     similarity_matrix = torch.matmul(all_embeddings, all_embeddings.T)
 
     return similarity_matrix, all_labels
-
-
-# def compute_proxy_hitrate(
-#     top_indices: torch.Tensor,
-#     labels: torch.Tensor,
-#     k_values: list,
-# ) -> dict[int, float]:
-#     assert top_indices.size(0) == labels.size(0)
-#     assert top_indices.size(1) == max(k_values)
-#
-#     n_samples = labels.size(0)
-#     recalls = {k: 0.0 for k in k_values}
-#
-#     for k in k_values:
-#         # Proxy Anchor's idx is the class idx
-#         pred_labels = top_indices[:, :k]
-#         # Take the value from multi-hot labels
-#         # if predicted class is present in true labels it selects 1 else 0
-#         hits = labels.gather(1, pred_labels)
-#         recalls[k] = (hits.sum(dim=1) > 0).float().sum().item()
-#
-#     for k in k_values:
-#         recalls[k] /= n_samples
-#
-#     return recalls
 
 
 def compute_proxy_hitrate(

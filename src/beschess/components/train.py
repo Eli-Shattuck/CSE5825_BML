@@ -78,6 +78,7 @@ train_loader = DirectLoader(
 )
 
 val_indices = np.concatenate([q_val, p_val]).tolist()
+np.random.shuffle(val_indices)
 val_subset = Subset(dataset, val_indices)
 val_loader = DataLoader(
     val_subset,
@@ -186,8 +187,9 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
 
     avg_val_loss = 0.0
-    for inputs, targets in val_loader:
-        with torch.no_grad():
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
             embeddings = model(inputs)
             batch_loss = loss_fn(embeddings, targets)
             avg_val_loss += batch_loss.item()
@@ -223,7 +225,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         epoch,
     )
 
-    if (epoch + 1) % 5 == 0 or epoch == EPOCHS - 1:
+    if epoch % 5 == 0 or epoch == EPOCHS - 1:
         board_embeddings, board_labels, proxy_embeddings, proxy_labels = (
             compute_tsne_embeddings(
                 model,
@@ -236,7 +238,6 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             board_embeddings,
             board_labels,
             proxy_embeddings,
-            proxy_labels,
             title=f"Epoch {epoch + 1} Embeddings",
         )
         writer.add_figure("Embeddings/TSNE", fig, global_step)
