@@ -74,7 +74,7 @@ train_loader = DirectLoader(
         dataset,
         q_val,
         p_val,
-        batch_size=2048,
+        batch_size=4096,
         steps_per_epoch=2000,
     ),
     device=device,
@@ -169,7 +169,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         similarity_matrix, val_labels = evaluate_proxy_cos(
             model, loss, val_loader, device
         )
-        _, top_indices = torch.topk(similarity_matrix, k=16, dim=1)
+        _, top_indices = torch.topk(similarity_matrix, k=4, dim=1)
         hitrate = compute_proxy_hitrate(top_indices, val_labels, k_values=[1, 3])
         val_map = compute_proxy_map(top_indices, val_labels, k_values=[1, 3])
         avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
@@ -195,11 +195,14 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         epoch,
     )
 
-    # print(
-    #     f"Epoch [{epoch + 1}/{EPOCHS}] - "
-    #     f"Train Loss: {avg_train_loss:.4f} - "
-    #     f"Val Loss: {avg_val_loss:.4f}"
-    #     f" - Val Recalls: {hitrate}"
-    #     f" - Val mAP: {val_map}"
-    # )
+    print(
+        f"Epoch {epoch + 1}/{EPOCHS} - "
+        f"Train Loss: {avg_train_loss:.4f} - "
+        f"Val Loss: {avg_val_loss:.4f} - "
+        f"Val MAP@3: {val_map[3]:.4f} - "
+        f"Val Hitrate@3: {hitrate[3]:.4f} - "
+        f"Val Quiet Margin: {avg_margin:.4f} - "
+        f"Val Quiet Margin Acc: {margin_acc:.4f}"
+    )
+
     break  # Remove this line to run full training
