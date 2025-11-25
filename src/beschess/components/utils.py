@@ -418,7 +418,7 @@ def compute_proxy_map(
         hits = 0
         sum_precisions = 0.0
 
-        pred_labels = top_indices[i]
+        pred_labels = top_indices[i].tolist()
         for j, pred_idx in enumerate(pred_labels):
             current_k = j + 1
             if pred_idx in true_set:
