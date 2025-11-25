@@ -1,5 +1,6 @@
 import random
 from pathlib import Path
+from datetime import datetime
 
 import chess
 import numpy as np
@@ -17,9 +18,11 @@ from beschess.data.embedding import (
     generate_split_indices,
 )
 from beschess.components.utils import (
+    CheckpointManager,
     evaluate_proxy_cos,
     compute_proxy_hitrate,
     compute_proxy_map,
+    compute_quiet_margin,
 )
 
 from beschess.utils import tensor_to_board
@@ -35,6 +38,7 @@ LOSS_LR = 1e-3
 EMBEDDING_DIM = 128
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "processed"
+CHECKPOINT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "checkpoints"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -113,6 +117,15 @@ scheduler = optim.lr_scheduler.OneCycleLR(
     pct_start=0.3,
 )
 
+model_name = f"{model.__class__.__name__}"
+loss_fn_name = f"{loss.__class__.__name__}"
+
+checkpoint_manager = CheckpointManager(
+    CHECKPOINT_DIR
+    / f"{model_name}_{loss_fn_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+    metric_key="val_map@3",
+)
+
 for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     model.train()
     total_train_loss = 0.0
@@ -157,18 +170,36 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             model, loss, val_loader, device
         )
         _, top_indices = torch.topk(similarity_matrix, k=16, dim=1)
-        recalls = compute_proxy_hitrate(
-            top_indices, val_labels, k_values=[1, 2, 4, 8, 16]
-        )
-        val_map = compute_proxy_map(top_indices, val_labels, k_values=[1, 2, 4, 8, 16])
+        hitrate = compute_proxy_hitrate(top_indices, val_labels, k_values=[1, 3])
+        val_map = compute_proxy_map(top_indices, val_labels, k_values=[1, 3])
+        avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
 
     avg_val_loss = total_val_loss / len(val_loader)
+    metrics = {
+        "val_map@1": val_map[1],
+        "val_map@3": val_map[2],
+        "val_hitrate@1": hitrate[1],
+        "val_hitrate@3": hitrate[3],
+        "val_quiet_margin": avg_margin,
+        "val_quiet_margin_acc": margin_acc,
+        "train_loss": avg_train_loss,
+        "val_loss": avg_val_loss,
+    }
 
-    print(
-        f"Epoch [{epoch + 1}/{EPOCHS}] - "
-        f"Train Loss: {avg_train_loss:.4f} - "
-        f"Val Loss: {avg_val_loss:.4f}"
-        f" - Val Recalls: {recalls}"
-        f" - Val mAP: {val_map}"
+    checkpoint_manager.check(
+        model,
+        loss,
+        optimizer,
+        scheduler,
+        metrics,
+        epoch,
     )
+
+    # print(
+    #     f"Epoch [{epoch + 1}/{EPOCHS}] - "
+    #     f"Train Loss: {avg_train_loss:.4f} - "
+    #     f"Val Loss: {avg_val_loss:.4f}"
+    #     f" - Val Recalls: {hitrate}"
+    #     f" - Val mAP: {val_map}"
+    # )
     break  # Remove this line to run full training

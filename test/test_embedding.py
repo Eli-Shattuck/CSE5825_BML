@@ -10,6 +10,7 @@ from beschess.components.utils import (
     compute_knn_hitrate,
     compute_proxy_hitrate,
     compute_proxy_map,
+    compute_quiet_margin,
 )
 
 NUM_SAMPLES = 8
@@ -200,3 +201,18 @@ def test_proxy_map(dataloader):
     for k in k_values:
         assert k in map_scores
         assert 0.0 <= map_scores[k] <= 1.0
+
+
+def test_quiet_margin(dataloader):
+    embedding_dim = 32
+    num_blocks = 2
+
+    model = ResEmbeddingNet(embedding_dim, num_blocks)
+    device = torch.device("cpu")
+
+    similarity_matrix, labels = evaluate_knn_cos(model, dataloader, device)
+    assert similarity_matrix.shape == (NUM_SAMPLES, NUM_SAMPLES)
+    assert labels.shape == (NUM_SAMPLES, NUM_CLASSES)
+    avg_margin, acc = compute_quiet_margin(similarity_matrix, labels)
+    assert isinstance(avg_margin, float)
+    assert 0.0 <= acc <= 1.0

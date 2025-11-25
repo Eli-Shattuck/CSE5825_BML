@@ -6,6 +6,84 @@ from tqdm import tqdm
 
 from .loss import ProxyAnchor
 
+from pathlib import Path
+
+
+class CheckpointManager:
+    def __init__(
+        self,
+        save_dir: Path | str,
+        metric_key: str,
+        higher_is_better: bool = True,
+        save_interval: int = 10,
+    ):
+        self.save_dir = Path(save_dir)
+        self.metric_key = metric_key
+        self.higher_is_better = higher_is_better
+        self.save_interval = save_interval
+
+        self.best_metric = float("-inf") if higher_is_better else float("inf")
+
+    def check(
+        self,
+        model: nn.Module,
+        loss_fn: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        metrics: dict[str, float],
+        epoch: int,
+    ):
+        current_metric = metrics.get(self.metric_key)
+        if current_metric is None:
+            raise ValueError(f"Metric '{self.metric_key}' not found in metrics.")
+
+        is_better = (
+            current_metric > self.best_metric
+            if self.higher_is_better
+            else current_metric < self.best_metric
+        )
+
+        if is_better:
+            self.best_metric = current_metric
+            self._save_checkpoint(
+                model,
+                loss_fn,
+                optimizer,
+                scheduler,
+                metrics,
+                "best_checkpoint.pth",
+            )
+
+        if epoch % self.save_interval == 0 and epoch != 0:
+            file_name = f"checkpoint_epoch_{epoch}.pth"
+            self._save_checkpoint(
+                model,
+                loss_fn,
+                optimizer,
+                scheduler,
+                metrics,
+                file_name,
+            )
+
+    def _save_checkpoint(
+        self,
+        model: nn.Module,
+        loss_fn: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        metrics: dict[str, float],
+        file_name: str,
+    ):
+        checkpoint = {
+            "model_state_dict": model.state_dict(),
+            "loss_fn_state_dict": loss_fn.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "metrics": metrics,
+        }
+        checkpoint_path = self.save_dir / file_name
+        torch.save(checkpoint, checkpoint_path)
+
 
 def lr_range_test(
     optimizer: torch.optim.Optimizer,
@@ -130,29 +208,51 @@ def evaluate_knn_cos(
     return similarity_matrix, all_labels
 
 
+# def compute_proxy_hitrate(
+#     top_indices: torch.Tensor,
+#     labels: torch.Tensor,
+#     k_values: list,
+# ) -> dict[int, float]:
+#     assert top_indices.size(0) == labels.size(0)
+#     assert top_indices.size(1) == max(k_values)
+#
+#     n_samples = labels.size(0)
+#     recalls = {k: 0.0 for k in k_values}
+#
+#     for k in k_values:
+#         # Proxy Anchor's idx is the class idx
+#         pred_labels = top_indices[:, :k]
+#         # Take the value from multi-hot labels
+#         # if predicted class is present in true labels it selects 1 else 0
+#         hits = labels.gather(1, pred_labels)
+#         recalls[k] = (hits.sum(dim=1) > 0).float().sum().item()
+#
+#     for k in k_values:
+#         recalls[k] /= n_samples
+#
+#     return recalls
+
+
 def compute_proxy_hitrate(
-    top_indices: torch.Tensor,
-    labels: torch.Tensor,
-    k_values: list,
+    top_indices: torch.Tensor, labels: torch.Tensor, k_values: list
 ) -> dict[int, float]:
-    assert top_indices.size(0) == labels.size(0)
-    assert top_indices.size(1) == max(k_values)
-
     n_samples = labels.size(0)
-    recalls = {k: 0.0 for k in k_values}
+    hitrates = {}
+
+    # hits matrix from the MAP function logic
+    # Shape: (N, max_k)
+    hits = labels.gather(1, top_indices)
+
+    # Check if ANY hit occurred in the first k columns
+    # cumsum > 0 implies at least one hit occurred so far
+    cum_hits = hits.cumsum(dim=1)
 
     for k in k_values:
-        # Proxy Anchor's idx is the class idx
-        pred_labels = top_indices[:, :k]
-        # Take the value from multi-hot labels
-        # if predicted class is present in true labels it selects 1 else 0
-        hits = labels.gather(1, pred_labels)
-        recalls[k] = (hits.sum(dim=1) > 0).float().sum().item()
+        # Look at column k-1. If value > 0, we found a hit.
+        has_hit = cum_hits[:, k - 1] > 0
+        hitrates[k] = has_hit.float().mean().item()
 
-    for k in k_values:
-        recalls[k] /= n_samples
-
-    return recalls
+    return hitrates
 
 
 def compute_knn_hitrate(
@@ -219,3 +319,36 @@ def compute_proxy_map(
         maps[k] /= n_samples
 
     return maps
+
+
+def compute_quiet_margin(
+    similarity_matrix: torch.Tensor, labels: torch.Tensor
+) -> tuple[float, float]:
+    """
+    Computes the 'Quiet Margin'
+
+    This is defined as the average difference in similarity
+    between the Quiet Proxy (index 0) and the most similar
+    non-Quiet Proxy, across all Quiet samples.
+
+    Larger margins indicate better separation.
+    Higher accuracy indicates that the Quiet Proxy
+    is the closest proxy more often.
+    """
+    quiet_mask = labels[:, 0] == 1.0
+
+    if quiet_mask.sum() == 0:
+        return 0.0, 0.0
+
+    quiet_sims = similarity_matrix[quiet_mask]
+
+    pos_scores = quiet_sims[:, 0]
+    neg_scores = quiet_sims[:, 1:].max(dim=1).values
+
+    margins = pos_scores - neg_scores
+
+    avg_margin = margins.mean().item()
+
+    accuracy = (margins > 0).float().mean().item()
+
+    return avg_margin, accuracy
