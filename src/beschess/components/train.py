@@ -16,6 +16,12 @@ from beschess.data.embedding import (
     PuzzleDataset,
     generate_split_indices,
 )
+from beschess.components.utils import (
+    evaluate_proxy_cos,
+    compute_proxy_hitrate,
+    compute_proxy_map,
+)
+
 from beschess.utils import tensor_to_board
 
 SEED = 42
@@ -31,6 +37,7 @@ EMBEDDING_DIM = 128
 DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "processed"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 quiet_boards_file = DATA_DIR / "quiet_boards_preeval.npy"
 puzzle_boards_file = DATA_DIR / "boards_packed.npy"
@@ -117,6 +124,10 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         desc="Training Batches",
         leave=False,
     ):
+        # Manually break off epochs due to infinite sampler
+        if batch_idx >= len(train_loader):
+            break
+
         inputs, targets = inputs.to(device), targets.to(device)
 
         optimizer.zero_grad()
@@ -142,11 +153,22 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
             total_val_loss += batch_loss.item()
 
+        similarity_matrix, val_labels = evaluate_proxy_cos(
+            model, loss, val_loader, device
+        )
+        _, top_indices = torch.topk(similarity_matrix, k=16, dim=1)
+        recalls = compute_proxy_hitrate(
+            top_indices, val_labels, k_values=[1, 2, 4, 8, 16]
+        )
+        val_map = compute_proxy_map(top_indices, val_labels, k_values=[1, 2, 4, 8, 16])
+
     avg_val_loss = total_val_loss / len(val_loader)
 
     print(
         f"Epoch [{epoch + 1}/{EPOCHS}] - "
         f"Train Loss: {avg_train_loss:.4f} - "
         f"Val Loss: {avg_val_loss:.4f}"
+        f" - Val Recalls: {recalls}"
+        f" - Val mAP: {val_map}"
     )
     break  # Remove this line to run full training
