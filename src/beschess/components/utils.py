@@ -261,7 +261,7 @@ def compute_knn_hitrate(
     k_values: list,
 ) -> dict[int, float]:
     assert top_indices.size(0) == labels.size(0)
-    assert top_indices.size(1) == max(k_values) + 1
+    assert top_indices.size(1) >= max(k_values) + 1
 
     n_samples = labels.size(0)
     recalls = {k: 0.0 for k in k_values}
@@ -286,7 +286,7 @@ def compute_proxy_map(
     k_values: list,
 ) -> dict[int, float]:
     assert top_indices.size(0) == labels.size(0)
-    assert top_indices.size(1) == max(k_values)
+    assert top_indices.size(1) >= max(k_values)
 
     n_samples = labels.size(0)
 
