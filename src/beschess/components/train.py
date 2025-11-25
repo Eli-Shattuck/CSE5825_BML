@@ -2,15 +2,15 @@ import random
 from pathlib import Path
 from datetime import datetime
 
-import chess
 import numpy as np
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
-from beschess.components.net.resnet import ResEmbeddingNet, SEResEmbeddingNet
+from beschess.components.net.resnet import SEResEmbeddingNet
 from beschess.data.embedding import (
     BalancedBatchSampler,
     DirectLoader,
@@ -25,8 +25,6 @@ from beschess.components.utils import (
     compute_quiet_margin,
 )
 
-from beschess.utils import tensor_to_board
-
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -34,11 +32,13 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 1e-3
+LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
+BATCH_SIZE = 4096
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "checkpoints"
+LOG_DIR = Path(__file__).resolve().parent.parent.parent.parent / "logs"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -51,11 +51,6 @@ quiet_boards = np.load(quiet_boards_file, mmap_mode="r")
 puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")
 puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")
 
-# subset for quick testing
-# quiet_boards = np.load(quiet_boards_file, mmap_mode="r")[:100000]
-# puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")[:100000]
-# puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")[:100000]
-
 dataset = PuzzleDataset(
     quiet_boards=quiet_boards,
     puzzle_boards=puzzle_boards,
@@ -67,23 +62,22 @@ q_train, p_train = splits["train"]
 q_val, p_val = splits["val"]
 q_test, p_test = splits["test"]
 
-
 train_loader = DirectLoader(
     dataset,
     BalancedBatchSampler(
         dataset,
-        q_val,
-        p_val,
-        batch_size=4096,
-        steps_per_epoch=2000,
+        q_train,
+        p_train,
+        batch_size=BATCH_SIZE,
+        steps_per_epoch=1000,
     ),
     device=device,
 )
 
-val_indices = np.concat([q_val, p_val]).tolist()
-vaL_subset = Subset(dataset, val_indices)
+val_indices = np.concatenate([q_val, p_val]).tolist()
+val_subset = Subset(dataset, val_indices)
 val_loader = DataLoader(
-    vaL_subset,
+    val_subset,
     batch_size=512,
     shuffle=False,
     num_workers=4,
@@ -95,7 +89,7 @@ model = SEResEmbeddingNet(
     reduction=16,
 ).to(device)
 
-loss = ProxyAnchor(
+loss_fn = ProxyAnchor(
     n_classes=16,
     embedding_dim=EMBEDDING_DIM,
     margin=0.1,
@@ -104,8 +98,12 @@ loss = ProxyAnchor(
 
 optimizer = torch.optim.AdamW(
     [
-        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-5},
-        {"params": loss.parameters(), "lr": LOSS_LR, "weight_decay": 0},
+        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
+        {
+            "params": loss_fn.parameters(),
+            "lr": LOSS_LR,
+            "weight_decay": 0,
+        },
     ]
 )
 
@@ -114,81 +112,95 @@ scheduler = optim.lr_scheduler.OneCycleLR(
     max_lr=[MODEL_LR, LOSS_LR],
     steps_per_epoch=len(train_loader),
     epochs=EPOCHS,
-    pct_start=0.3,
+    pct_start=0.1,
 )
 
-model_name = f"{model.__class__.__name__}"
-loss_fn_name = f"{loss.__class__.__name__}"
-
+run_name = f"{model.__class__.__name__}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+(CHECKPOINT_DIR / run_name).mkdir(parents=True, exist_ok=True)
 checkpoint_manager = CheckpointManager(
-    CHECKPOINT_DIR
-    / f"{model_name}_{loss_fn_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+    CHECKPOINT_DIR / run_name,
     metric_key="val_map@3",
 )
 
+writer = SummaryWriter(log_dir=LOG_DIR / run_name)
+global_step = 0
+
 for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     model.train()
+    loss_fn.train()
     total_train_loss = 0.0
 
-    # for batch_idx, (inputs, targets) in enumerate(train_loader):
-    for batch_idx, (inputs, targets) in tqdm(
-        enumerate(train_loader),
-        total=len(train_loader),
-        desc="Training Batches",
-        leave=False,
-    ):
-        # Manually break off epochs due to infinite sampler
-        if batch_idx >= len(train_loader):
-            break
+    pbar = tqdm(
+        train_loader, total=len(train_loader), desc="Training Batches", leave=False
+    )
 
-        inputs, targets = inputs.to(device), targets.to(device)
+    for i, (inputs, targets) in enumerate(pbar):
+        # Stop epoch if we've reached the defined number of steps
+        # This is due to the BalancedBatchSampler being an infinite sampler
+        if i >= len(train_loader):
+            break
 
         optimizer.zero_grad()
         embeddings = model(inputs)
-        batch_loss = loss(embeddings, targets)
+        batch_loss = loss_fn(embeddings, targets)
         batch_loss.backward()
         optimizer.step()
         scheduler.step()
 
         total_train_loss += batch_loss.item()
 
+        if global_step % 50 == 0:
+            writer.add_scalar("Train/Loss", batch_loss.item(), global_step)
+
+            lrs = scheduler.get_last_lr()
+            writer.add_scalar("Train/LR_Backbone", lrs[0], global_step)
+            writer.add_scalar("Train/LR_Proxy", lrs[1], global_step)
+
+            with torch.no_grad():
+                proxy_norm = torch.norm(loss_fn.proxies, dim=1).mean()
+                writer.add_scalar("Debug/Proxy_Norms", proxy_norm, global_step)
+
+        global_step += 1
+
     avg_train_loss = total_train_loss / len(train_loader)
 
     model.eval()
     total_val_loss = 0.0
 
-    with torch.no_grad():
-        for inputs, targets in val_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
+    similarity_matrix, val_labels = evaluate_proxy_cos(
+        model, loss_fn, val_loader, device
+    )
 
-            embeddings = model(inputs)
-            batch_loss = loss(embeddings, targets)
+    similarity_matrix = similarity_matrix.cpu()
+    val_labels = val_labels.cpu()
 
-            total_val_loss += batch_loss.item()
+    k_list = [1, 3]
+    max_k = max(k_list)
+    _, top_indices = torch.topk(similarity_matrix, k=max_k, dim=1)
 
-        similarity_matrix, val_labels = evaluate_proxy_cos(
-            model, loss, val_loader, device
-        )
-        _, top_indices = torch.topk(similarity_matrix, k=4, dim=1)
-        hitrate = compute_proxy_hitrate(top_indices, val_labels, k_values=[1, 3])
-        val_map = compute_proxy_map(top_indices, val_labels, k_values=[1, 3])
-        avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
+    hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
+    val_map = compute_proxy_map(top_indices, val_labels, k_list)
+    avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
 
-    avg_val_loss = total_val_loss / len(val_loader)
     metrics = {
         "val_map@1": val_map[1],
-        "val_map@3": val_map[2],
+        "val_map@3": val_map[3],
         "val_hitrate@1": hitrate[1],
         "val_hitrate@3": hitrate[3],
         "val_quiet_margin": avg_margin,
         "val_quiet_margin_acc": margin_acc,
         "train_loss": avg_train_loss,
-        "val_loss": avg_val_loss,
     }
+
+    writer.add_scalar("Val/MAP@3", val_map[3], global_step)
+    writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
+    writer.add_scalar("Val/Quiet_Margin", avg_margin, global_step)
+    writer.add_scalar("Val/Quiet_Acc", margin_acc, global_step)
+    writer.add_scalars("Loss/Combined", {"Train": avg_train_loss}, global_step)
 
     checkpoint_manager.check(
         model,
-        loss,
+        loss_fn,
         optimizer,
         scheduler,
         metrics,
@@ -196,13 +208,11 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     print(
-        f"Epoch {epoch + 1}/{EPOCHS} - "
-        f"Train Loss: {avg_train_loss:.4f} - "
-        f"Val Loss: {avg_val_loss:.4f} - "
-        f"Val MAP@3: {val_map[3]:.4f} - "
-        f"Val Hitrate@3: {hitrate[3]:.4f} - "
-        f"Val Quiet Margin: {avg_margin:.4f} - "
-        f"Val Quiet Margin Acc: {margin_acc:.4f}"
+        f"Epoch {epoch + 1}/{EPOCHS} | "
+        f"Train Loss: {avg_train_loss:.4f} | "
+        f"MAP@3: {val_map[3]:.4f} | "
+        f"HR@3: {hitrate[3]:.4f} | "
+        f"Margin: {avg_margin:.4f}"
     )
 
-    break  # Remove this line to run full training
+writer.close()
