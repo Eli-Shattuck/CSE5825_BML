@@ -1,7 +1,8 @@
 import random
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim as optim
@@ -11,18 +12,20 @@ from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
 from beschess.components.net.resnet import SEResEmbeddingNet
+from beschess.components.utils import (
+    CheckpointManager,
+    compute_proxy_hitrate,
+    compute_proxy_map,
+    compute_quiet_margin,
+    compute_tsne_embeddings,
+    plot_tsne_embeddings,
+    evaluate_proxy_cos,
+)
 from beschess.data.embedding import (
     BalancedBatchSampler,
     DirectLoader,
     PuzzleDataset,
     generate_split_indices,
-)
-from beschess.components.utils import (
-    CheckpointManager,
-    evaluate_proxy_cos,
-    compute_proxy_hitrate,
-    compute_proxy_map,
-    compute_quiet_margin,
 )
 
 SEED = 42
@@ -182,6 +185,15 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     val_map = compute_proxy_map(top_indices, val_labels, k_list)
     avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
 
+    avg_val_loss = 0.0
+    for inputs, targets in val_loader:
+        with torch.no_grad():
+            embeddings = model(inputs)
+            batch_loss = loss_fn(embeddings, targets)
+            avg_val_loss += batch_loss.item()
+
+    avg_val_loss /= len(val_loader)
+
     metrics = {
         "val_map@1": val_map[1],
         "val_map@3": val_map[3],
@@ -192,11 +204,15 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         "train_loss": avg_train_loss,
     }
 
+    writer.add_scalar("Val/MAP@1", val_map[1], global_step)
     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
+    writer.add_scalar("Val/HitRate@3", hitrate[3], global_step)
     writer.add_scalar("Val/Quiet_Margin", avg_margin, global_step)
     writer.add_scalar("Val/Quiet_Acc", margin_acc, global_step)
-    writer.add_scalars("Loss/Combined", {"Train": avg_train_loss}, global_step)
+
+    writer.add_scalar("Loss/Epoch_Avg", avg_train_loss, global_step)
+    writer.add_scalar("Loss/Epoch_Avg", avg_val_loss, global_step)
 
     checkpoint_manager.check(
         model,
@@ -206,6 +222,25 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         metrics,
         epoch,
     )
+
+    if (epoch + 1) % 5 == 0 or epoch == EPOCHS - 1:
+        board_embeddings, board_labels, proxy_embeddings, proxy_labels = (
+            compute_tsne_embeddings(
+                model,
+                loss_fn,
+                val_loader,
+                device,
+            )
+        )
+        fig = plot_tsne_embeddings(
+            board_embeddings,
+            board_labels,
+            proxy_embeddings,
+            proxy_labels,
+            title=f"Epoch {epoch + 1} Embeddings",
+        )
+        writer.add_figure("Embeddings/TSNE", fig, global_step)
+        plt.close(fig)
 
     print(
         f"Epoch {epoch + 1}/{EPOCHS} | "

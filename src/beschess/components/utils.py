@@ -1,12 +1,34 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.manifold import TSNE
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .loss import ProxyAnchor
 
-from pathlib import Path
+TAG_NAMES = [
+    "quiet",
+    "bishopEndgame",
+    "diagonalMate",
+    "discoveredAttack",
+    "fork",
+    "knightEndgame",
+    "knightMate",
+    "orthogonalMate",
+    "pawnEndgame",
+    "pin",
+    "queenEndgame",
+    "queenMate",
+    "queenRookEndgame",
+    "rookEndgame",
+    "skewer",
+    "xRayAttack",
+]
 
 
 class CheckpointManager:
@@ -83,6 +105,99 @@ class CheckpointManager:
         }
         checkpoint_path = self.save_dir / file_name
         torch.save(checkpoint, checkpoint_path)
+
+
+def compute_tsne_embeddings(
+    model: nn.Module,
+    loss_fn: ProxyAnchor,
+    dataloader: DataLoader,
+    device: torch.device,
+    n_samples: int = 2000,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    model_is_train = model.training
+    model.eval()
+    all_embeddings = []
+    all_labels = []
+
+    count = 0
+    with torch.no_grad():
+        for boards, labels in dataloader:
+            boards = boards.to(device)
+            embeddings = model(boards)
+            all_embeddings.append(embeddings.cpu())
+            all_labels.append(labels)
+
+            count += boards.size(0)
+            if count >= n_samples:
+                break
+
+    model.train(model_is_train)
+
+    all_embeddings = torch.cat(all_embeddings, dim=0)[:n_samples].numpy()
+    all_labels = torch.cat(all_labels, dim=0)[:n_samples].numpy()
+
+    proxies = F.normalize(loss_fn.proxies.detach().cpu(), p=2, dim=1).numpy()
+    proxy_labels = np.arange(proxies.shape[0])
+
+    X = np.vstack([all_embeddings, proxies])
+    tsne_model = TSNE(n_components=2, random_state=42)
+
+    X_embedded = tsne_model.fit_transform(X).asarray()
+    embeddings_2d = X_embedded[:n_samples, :]
+    proxies_2d = X_embedded[n_samples:, :]
+
+    return embeddings_2d, all_labels, proxies_2d, proxy_labels
+
+
+def plot_tsne_embeddings(
+    embeddings_2d: np.ndarray,
+    labels: np.ndarray,
+    proxies_2d: np.ndarray,
+    proxy_labels: np.ndarray,
+    title: str = "t-SNE Embeddings",
+):
+    fig, ax = plt.subplots(figsize=(10, 10))
+    scatter = ax.scatter(
+        embeddings_2d[:, 0],
+        embeddings_2d[:, 1],
+        c=np.argmax(labels, axis=1),
+        cmap="tab20",
+        alpha=0.6,
+        s=10,
+    )
+    for i, proxy_point in enumerate(proxies_2d):
+        ax.scatter(
+            proxy_point[0],
+            proxy_point[1],
+            c="black",
+            marker="X",
+            s=200,
+            edgecolors="white",
+            linewidths=1.5,
+        )
+        ax.text(
+            proxy_point[0],
+            proxy_point[1],
+            TAG_NAMES[proxy_labels[i]],
+            fontsize=9,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            color="white",
+        )
+
+    legend1 = ax.legend(
+        *scatter.legend_elements(num=16),
+        title="Tags",
+        loc="upper right",
+    )
+    ax.add_artist(legend1)
+    plt.title(title)
+    plt.xlabel("t-SNE Dimension 1")
+    plt.ylabel("t-SNE Dimension 2")
+    plt.grid(True)
+
+    return fig
 
 
 def lr_range_test(
