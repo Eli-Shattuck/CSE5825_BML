@@ -107,19 +107,13 @@ model = SEResEmbeddingNet(
     num_blocks=10,
 ).to(device)
 
-# loss_fn = ProxyAnchor(
-#     n_classes=16,
-#     embedding_dim=EMBEDDING_DIM,
-#     margin=0.1,
-#     alpha=32,
-# ).to(device)
-# warm_start_quiet_proxy(model, loss_fn, train_loader, device)
-loss_fn = losses.ProxyAnchorLoss(
-    num_classes=16,
-    embedding_size=EMBEDDING_DIM,
+loss_fn = ProxyAnchor(
+    n_classes=16,
+    embedding_dim=EMBEDDING_DIM,
     margin=0.1,
     alpha=32,
 ).to(device)
+warm_start_quiet_proxy(model, loss_fn, train_loader, device)
 
 optimizer = torch.optim.AdamW(
     [
