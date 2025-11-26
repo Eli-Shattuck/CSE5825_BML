@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-from beschess.components.net.resnet import SEResEmbeddingNet
+from beschess.components.net.resnet import SEResEmbeddingNet, MultiTaskSEResEmbeddingNet
 from beschess.components.loss import ProxyAnchor
 from beschess.utils import packed_to_tensor, packed_to_board
 from pathlib import Path
@@ -18,8 +18,13 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # CHECKPOINT = (
 #     CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_000940" / "checkpoint_epoch_10.pth"
 # )
+# CHECKPOINT = (
+#     CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_161405" / "best_checkpoint.pth"
+# )
 CHECKPOINT = (
-    CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_161405" / "best_checkpoint.pth"
+    CHECKPOINT_DIR
+    / "MultiTaskSEResEmbeddingNet_20251126_173236"
+    / "best_checkpoint.pth"
 )
 N_SAMPLES = 5000  # Load a small chunk to test
 
@@ -35,7 +40,8 @@ def verify():
 
     # 2. Load Model
     print("Loading model...")
-    model = SEResEmbeddingNet(embedding_dim=128, num_blocks=10, reduction=8).to(DEVICE)
+    # model = SEResEmbeddingNet(embedding_dim=128, num_blocks=10, reduction=8).to(DEVICE)
+    model = MultiTaskSEResEmbeddingNet(embedding_dim=128, num_blocks=10).to(DEVICE)
     checkpoint = torch.load(CHECKPOINT, map_location=DEVICE)
     model.load_state_dict(
         checkpoint["model_state_dict"]
@@ -55,6 +61,8 @@ def verify():
 
     with torch.no_grad():
         out = model(inputs)
+        if isinstance(out, tuple):
+            out = out[0]
         embeddings = out.cpu().numpy()
 
     # 4. Find Nearest Neighbors
