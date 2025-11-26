@@ -8,6 +8,9 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
+
+# Import cross entropy loss
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
@@ -35,7 +38,7 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 1e-4
+LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 
