@@ -137,6 +137,7 @@ class DirectLoader:
         """Loads the entire dataset onto the GPU to bypass DataLoader bottlenecks."""
         self.sampler = sampler
         self.device = device
+        self.batch_size = sampler.batch_size
 
         n_total = len(dataset)
 

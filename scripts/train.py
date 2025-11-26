@@ -16,6 +16,7 @@ from beschess.components.loss import ProxyAnchor
 from beschess.components.net.resnet import SEResEmbeddingNet
 from beschess.components.utils import (
     CheckpointManager,
+    warm_start_quiet_proxy,
     compute_proxy_hitrate,
     compute_proxy_map,
     compute_quiet_margin,
@@ -40,9 +41,6 @@ MODEL_LR = 1e-4
 LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
-
-OHEM_RATIO = 0.5
-OHEM_START_EPOCH = 0
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
@@ -114,6 +112,7 @@ loss_fn = ProxyAnchor(
     margin=0.1,
     alpha=32,
 ).to(device)
+warm_start_quiet_proxy(model, loss_fn, train_loader, device)
 
 optimizer = torch.optim.AdamW(
     [
@@ -151,43 +150,10 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     for i, (inputs, targets) in enumerate(pbar):
-        # inputs, targets = inputs.to(device), targets.to(device)
-        # optimizer.zero_grad()
-        # embeddings = model(inputs)
-        # batch_loss = loss_fn(embeddings, targets)
-        if epoch >= OHEM_START_EPOCH:
-            with torch.no_grad():
-                embeddings = model(inputs)
-
-                emb_norm = F.normalize(embeddings, p=2, dim=1)
-                prox_norm = F.normalize(loss_fn.proxies, p=2, dim=1)
-
-                sim_matrix = torch.matmul(emb_norm, prox_norm.T)
-
-                true_sims = sim_matrix.clone()
-                true_mask = (targets > 0).bool()
-                true_sims[~true_mask] = -float("inf")
-                # For multi-label, we take the best match among true tags
-                target_sim, _ = true_sims.max(dim=1)
-
-                neg_sims = sim_matrix.clone()
-                neg_sims[true_mask] = -float("inf")
-                hard_neg_sim, _ = neg_sims.max(dim=1)
-
-                difficulty = hard_neg_sim - target_sim
-
-                k = int(inputs.size(0) * OHEM_RATIO)
-                _, hard_indices = torch.topk(difficulty, k)
-
-            final_inputs = inputs[hard_indices]
-            final_targets = targets[hard_indices]
-
-        else:
-            final_inputs = inputs
-            final_targets = targets
-
-        final_embeddings = model(final_inputs)
-        batch_loss = loss_fn(final_embeddings, final_targets)
+        inputs, targets = inputs.to(device), targets.to(device)
+        optimizer.zero_grad()
+        embeddings = model(inputs)
+        batch_loss = loss_fn(embeddings, targets)
         batch_loss.backward()
         optimizer.step()
         scheduler.step()

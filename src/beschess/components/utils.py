@@ -10,6 +10,8 @@ from sklearn.manifold import TSNE
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from beschess.data.embedding import DirectLoader
+
 from .loss import ProxyAnchor
 
 TAG_NAMES = [
@@ -266,6 +268,40 @@ def plot_tsne_embeddings(
 
     plt.tight_layout()
     return fig
+
+
+def warm_start_quiet_proxy(
+    model: torch.nn.Module,
+    loss_fn: ProxyAnchor,
+    dataloader: torch.utils.data.DataLoader | DirectLoader,
+    device: torch.device,
+):
+    model.eval()
+
+    quiet_embeddings = []
+
+    with torch.no_grad():
+        for inputs, targets in dataloader:
+            inputs = inputs.to(device)
+            quiet_mask = targets[:, 0] == 1.0
+
+            if quiet_mask.sum() > 0:
+                emb = model(inputs[quiet_mask])
+                emb = torch.nn.functional.normalize(emb, p=2, dim=1)
+                quiet_embeddings.append(emb)
+
+            if len(quiet_embeddings) * dataloader.batch_size > 1000:
+                break
+
+    if not quiet_embeddings:
+        print("Warning: No quiet samples found for warm start.")
+        return
+
+    all_quiet = torch.cat(quiet_embeddings, dim=0)
+    centroid = all_quiet.mean(dim=0)
+    centroid = torch.nn.functional.normalize(centroid, p=2, dim=0)
+
+    loss_fn.proxies.data[0] = centroid
 
 
 def lr_range_test(
