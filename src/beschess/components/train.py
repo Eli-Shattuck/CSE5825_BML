@@ -80,7 +80,7 @@ train_loader = DirectLoader(
 
 val_loader = DataLoader(
     dataset,
-    sampler=BalancedBatchSampler(
+    batch_sampler=BalancedBatchSampler(
         dataset,
         q_val,
         p_val,
@@ -167,11 +167,6 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     for i, (inputs, targets) in enumerate(pbar):
-        # Stop epoch if we've reached the defined number of steps
-        # This is due to the BalancedBatchSampler being an infinite sampler
-        if i >= len(train_loader):
-            break
-
         optimizer.zero_grad()
         embeddings = model(inputs)
         batch_loss = loss_fn(embeddings, targets)

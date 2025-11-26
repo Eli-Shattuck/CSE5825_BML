@@ -95,7 +95,8 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
         for label in self.label_map.keys():
             np.random.shuffle(self.label_map[label])
 
-        while True:
+        # while True:
+        for _ in range(self.steps_per_epoch):
             batch = []
 
             for _ in range(self.n_quiet_per_batch):
