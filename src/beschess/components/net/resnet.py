@@ -19,7 +19,7 @@ class SEResBlock(nn.Module):
         residual = x
 
         out = self.act(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+        out = self.act(self.bn2(self.conv2(out)))
         out = self.se(out)
 
         out += residual
@@ -40,7 +40,7 @@ class ResBlock(nn.Module):
         residual = x
 
         out = self.act(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
+        out = self.act(self.bn2(self.conv2(out)))
 
         out += residual
         out = self.act(out)
