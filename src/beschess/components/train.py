@@ -66,16 +66,16 @@ q_train, p_train = splits["train"]
 q_val, p_val = splits["val"]
 q_test, p_test = splits["test"]
 
-train_loader = DirectLoader(
+train_loader = DataLoader(
     dataset,
-    BalancedBatchSampler(
+    batch_sampler=BalancedBatchSampler(
         dataset,
         q_val,
         p_val,
         batch_size=BATCH_SIZE,
         steps_per_epoch=10,
     ),
-    device=device,
+    num_workers=4,
 )
 
 VAL_BATCH_SIZE = 512
@@ -168,6 +168,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     for i, (inputs, targets) in enumerate(pbar):
+        inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         embeddings = model(inputs)
         batch_loss = loss_fn(embeddings, targets)
