@@ -8,12 +8,10 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from pytorch_metric_learning import losses
 import torch.nn.functional as F
 
 from tqdm import tqdm
 
-from beschess.components.loss import ProxyAnchor
 from beschess.components.net.resnet import SEResEmbeddingNet
 from beschess.components.utils import (
     CheckpointManager,
@@ -107,30 +105,15 @@ model = SEResEmbeddingNet(
     num_blocks=10,
 ).to(device)
 
-# loss_fn = ProxyAnchor(
-#     n_classes=16,
-#     embedding_dim=EMBEDDING_DIM,
-#     margin=0.1,
-#     alpha=32,
-# ).to(device)
-# warm_start_quiet_proxy(model, loss_fn, train_loader, device)
-loss_fn = losses.ProxyAnchorLoss(
-    num_classes=16,
-    embedding_size=EMBEDDING_DIM,
-    margin=0.1,
-    alpha=32,
-).to(device)
-
 optimizer = torch.optim.AdamW(
     [
         {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
-        {"params": loss_fn.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )
 
 scheduler = optim.lr_scheduler.OneCycleLR(
     optimizer,
-    max_lr=[MODEL_LR, LOSS_LR],
+    max_lr=[MODEL_LR],
     steps_per_epoch=len(train_loader),
     epochs=EPOCHS,
     pct_start=0.1,

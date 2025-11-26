@@ -15,8 +15,11 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # CHECKPOINT = (
 #     CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_000940" / "best_checkpoint.pth"
 # )
+# CHECKPOINT = (
+#     CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_000940" / "checkpoint_epoch_10.pth"
+# )
 CHECKPOINT = (
-    CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_000940" / "checkpoint_epoch_10.pth"
+    CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_161405" / "best_checkpoint.pth"
 )
 N_SAMPLES = 5000  # Load a small chunk to test
 

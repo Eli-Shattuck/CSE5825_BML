@@ -80,3 +80,35 @@ class ResEmbeddingNet(BaseEmbeddingNet):
 class SEResEmbeddingNet(BaseEmbeddingNet):
     def __init__(self, embedding_dim: int, num_blocks: int, reduction: int = 8):
         super().__init__(embedding_dim, num_blocks, SEResBlock(64, reduction))
+
+
+class MultiTaskEmbeddingNet(nn.Module):
+    def __init__(
+        self,
+        embedding_dim: int,
+        num_blocks: int,
+        block: nn.Module,
+    ):
+        super().__init__()
+        self.conv_input = nn.Conv2d(17, 64, 3, padding=1)
+        self.bn_input = nn.BatchNorm2d(64)
+        self.res_layers = nn.Sequential(*[block for _ in range(num_blocks)])
+        self.conv_output = nn.Conv2d(64, 32, 1)
+        self.flat_dim = 32 * 8 * 8
+        self.embedding_head = nn.Linear(32 * 8 * 8, embedding_dim)
+        self.puzzle_head = nn.Sequential(
+            nn.Linear(self.flat_dim, 128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, 1),
+        )
+
+    def forward(self, x: torch.Tensor):
+        x = F.relu(self.bn_input(self.conv_input(x)))
+        x = self.res_layers(x)
+        x = F.relu(self.conv_output(x))
+        features = x.view(x.size(0), -1)
+        emb = self.embedding_head(features)
+        emb = F.normalize(emb, p=2, dim=1)
+        puzzle_logits = self.puzzle_head(features)
+
+        return emb, puzzle_logits

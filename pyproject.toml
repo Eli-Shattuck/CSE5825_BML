@@ -13,6 +13,7 @@ dependencies = [
     "pandas>=2.3.3",
     "pytest>=9.0.1",
     "python-chess>=1.999",
+    "pytorch-metric-learning>=2.9.0",
     "scikit-learn>=1.7.2",
     "scipy>=1.16.2",
     "seaborn>=0.13.2",
