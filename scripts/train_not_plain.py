@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 from pytorch_metric_learning import losses
 import torch.nn.functional as F
@@ -101,6 +101,14 @@ val_loader = DataLoader(
         batch_size=VAL_BATCH_SIZE,
         steps_per_epoch=VAL_STEPS,
     ),
+    num_workers=4,
+)
+
+val_puzzle_subset = Subset(dataset, p_val)
+val_puzzle_loader = DataLoader(
+    val_puzzle_subset,
+    batch_size=VAL_BATCH_SIZE,
+    shuffle=False,
     num_workers=4,
 )
 
@@ -204,8 +212,11 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     model.eval()
     total_val_loss = 0.0
 
+    # similarity_matrix, val_labels = evaluate_proxy_cos(
+    #     model, loss_fn_emb, val_loader, device
+    # )
     similarity_matrix, val_labels = evaluate_proxy_cos(
-        model, loss_fn_emb, val_loader, device
+        model, loss_fn_emb, val_puzzle_loader, device
     )
 
     similarity_matrix = similarity_matrix.cpu()
@@ -217,15 +228,15 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
     hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
     val_map = compute_proxy_map(top_indices, val_labels, k_list)
-    avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
+    # avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
 
     metrics = {
         "val_map@1": val_map[1],
         "val_map@3": val_map[3],
         "val_hitrate@1": hitrate[1],
         "val_hitrate@3": hitrate[3],
-        "val_quiet_margin": avg_margin,
-        "val_quiet_margin_acc": margin_acc,
+        # "val_quiet_margin": avg_margin,
+        # "val_quiet_margin_acc": margin_acc,
         "train_loss": avg_train_loss,
     }
 
@@ -233,8 +244,8 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
     writer.add_scalar("Val/HitRate@3", hitrate[3], global_step)
-    writer.add_scalar("Val/Quiet_Margin", avg_margin, global_step)
-    writer.add_scalar("Val/Quiet_Acc", margin_acc, global_step)
+    # writer.add_scalar("Val/Quiet_Margin", avg_margin, global_step)
+    # writer.add_scalar("Val/Quiet_Acc", margin_acc, global_step)
 
     checkpoint_manager.check(
         model,
@@ -246,7 +257,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     if epoch % 5 == 0 or epoch == EPOCHS - 1:
-        board_embeddings, board_labels, proxy_embeddings, proxy_labels = (
+        board_embeddings, board_labels, proxy_embeddings, proxy_labels, all_probs = (
             compute_tsne_embeddings(
                 model,
                 loss_fn_emb,
@@ -258,6 +269,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             board_embeddings,
             board_labels,
             proxy_embeddings,
+            all_probs,
             title=f"Epoch {epoch + 1} Embeddings",
         )
         writer.add_figure("Embeddings/TSNE", fig, global_step)
@@ -267,8 +279,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         f"Epoch {epoch + 1}/{EPOCHS} | "
         f"Train Loss: {avg_train_loss:.4f} | "
         f"MAP@3: {val_map[3]:.4f} | "
-        f"HR@3: {hitrate[3]:.4f} | "
-        f"Margin: {avg_margin:.4f}"
+        f"HR@1: {hitrate[1]:.4f} | "
     )
 
 writer.close()
