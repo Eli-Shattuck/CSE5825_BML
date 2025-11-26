@@ -35,7 +35,7 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 5e-2
+LOSS_LR = 1e-4
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 
