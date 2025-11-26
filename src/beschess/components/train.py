@@ -35,7 +35,7 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 5e-2
+LOSS_LR = 1e-1
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 
@@ -96,18 +96,14 @@ model = SEResEmbeddingNet(
 loss_fn = ProxyAnchor(
     n_classes=16,
     embedding_dim=EMBEDDING_DIM,
-    margin=0.1,
+    margin=0.2,
     alpha=32,
 ).to(device)
 
 optimizer = torch.optim.AdamW(
     [
         {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
-        {
-            "params": loss_fn.parameters(),
-            "lr": LOSS_LR,
-            "weight_decay": 0,
-        },
+        {"params": loss_fn.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )
 
