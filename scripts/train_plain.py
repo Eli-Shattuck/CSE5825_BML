@@ -42,7 +42,7 @@ EPOCHS = 50
 MODEL_LR = 1e-4
 LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
-BATCH_SIZE = 4096
+BATCH_SIZE = 2048
 LAMBDA_BCE = 0.5
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -115,7 +115,7 @@ loss_fn_emb = ProxyAnchor(
     margin=0.1,
     alpha=32,
 ).to(device)
-warm_start_quiet_proxy(model, loss_fn_emb, train_loader, device)
+# warm_start_quiet_proxy(model, loss_fn_emb, train_loader, device)
 
 loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
 

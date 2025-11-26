@@ -127,6 +127,8 @@ def compute_tsne_embeddings(
         for boards, labels in dataloader:
             boards = boards.to(device)
             embeddings = model(boards)
+            if type(embeddings) is tuple:
+                embeddings = embeddings[0]
             all_embeddings.append(embeddings.cpu())
             all_labels.append(labels)
 
@@ -286,9 +288,11 @@ def warm_start_quiet_proxy(
             quiet_mask = targets[:, 0] == 1.0
 
             if quiet_mask.sum() > 0:
-                emb = model(inputs[quiet_mask])
-                emb = torch.nn.functional.normalize(emb, p=2, dim=1)
-                quiet_embeddings.append(emb)
+                embedding = model(inputs[quiet_mask])
+                if type(embedding) is tuple:
+                    embedding = embedding[0]
+                embedding = torch.nn.functional.normalize(embedding, p=2, dim=1)
+                quiet_embeddings.append(embedding)
 
             if len(quiet_embeddings) * dataloader.batch_size > 1000:
                 break
@@ -342,6 +346,8 @@ def lr_range_test(
 
         optimizer.zero_grad()
         outputs = model(inputs)
+        if type(outputs) is tuple:
+            outputs = outputs[0]
         loss = loss_fn(outputs, targets)
 
         current_loss = loss.item()
@@ -384,6 +390,8 @@ def evaluate_proxy_cos(
         for boards, labels in tqdm(dataloader, desc="Evaluating Proxy COS"):
             boards = boards.to(device)
             embeddings = model(boards)
+            if type(embeddings) is tuple:
+                embeddings = embeddings[0]
             all_embeddings.append(embeddings.cpu())
             all_labels.append(labels)
 
@@ -413,6 +421,8 @@ def evaluate_knn_cos(
         for boards, labels in tqdm(dataloader, desc="Evaluating COS"):
             boards = boards.to(device)
             embeddings = model(boards)
+            if type(embeddings) is tuple:
+                embeddings = embeddings[0]
             all_embeddings.append(embeddings.cpu())
             all_labels.append(labels)
 
@@ -430,19 +440,13 @@ def evaluate_knn_cos(
 def compute_proxy_hitrate(
     top_indices: torch.Tensor, labels: torch.Tensor, k_values: list
 ) -> dict[int, float]:
-    n_samples = labels.size(0)
     hitrates = {}
 
-    # hits matrix from the MAP function logic
-    # Shape: (N, max_k)
     hits = labels.gather(1, top_indices)
 
-    # Check if ANY hit occurred in the first k columns
-    # cumsum > 0 implies at least one hit occurred so far
     cum_hits = hits.cumsum(dim=1)
 
     for k in k_values:
-        # Look at column k-1. If value > 0, we found a hit.
         has_hit = cum_hits[:, k - 1] > 0
         hitrates[k] = has_hit.float().mean().item()
 
