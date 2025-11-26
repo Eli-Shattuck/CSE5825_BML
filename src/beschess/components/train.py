@@ -78,13 +78,16 @@ train_loader = DirectLoader(
     device=device,
 )
 
+VAL_BATCH_SIZE = 512
+VAL_STEPS = (len(q_val) + len(p_val)) // VAL_BATCH_SIZE + 1
 val_loader = DataLoader(
     dataset,
     batch_sampler=BalancedBatchSampler(
         dataset,
         q_val,
         p_val,
-        batch_size=512,
+        batch_size=VAL_BATCH_SIZE,
+        steps_per_epoch=VAL_STEPS,
     ),
     shuffle=False,
     num_workers=4,
