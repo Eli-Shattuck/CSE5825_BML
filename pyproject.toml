@@ -21,6 +21,7 @@ dependencies = [
     "torch>=2.9.1",
     "tqdm>=4.67.1",
     "ujson>=5.11.0",
+    "umap-learn>=0.5.9.post2",
 ]
 
 

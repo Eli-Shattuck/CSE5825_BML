@@ -6,11 +6,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import torch.nn.functional as F
 
-# Import cross entropy loss
-from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
@@ -42,9 +41,12 @@ LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "processed"
-CHECKPOINT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "checkpoints"
-LOG_DIR = Path(__file__).resolve().parent.parent.parent.parent / "logs"
+OHEM_RATIO = 0.5
+OHEM_START_EPOCH = 0
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
+CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -63,42 +65,17 @@ dataset = PuzzleDataset(
     puzzle_labels=puzzle_labels,
 )
 
-# # Sanity check dataset
-# splits = generate_split_indices(dataset, test_split=0.001, val_split=0.001)
-# q_train, p_train = splits["train"]
-# q_val, p_val = splits["val"]
-# q_test, p_test = splits["test"]
-#
-# train_loader = DataLoader(
-#     dataset,
-#     batch_sampler=BalancedBatchSampler(
-#         dataset,
-#         q_val,
-#         p_val,
-#         batch_size=BATCH_SIZE,
-#         steps_per_epoch=10,
-#     ),
-#     num_workers=4,
-# )
-#
-# VAL_BATCH_SIZE = 512
-# VAL_STEPS = (len(q_val) + len(p_val)) // VAL_BATCH_SIZE + 1
-# val_loader = DataLoader(
-#     dataset,
-#     batch_sampler=BalancedBatchSampler(
-#         dataset,
-#         q_val,
-#         p_val,
-#         batch_size=VAL_BATCH_SIZE,
-#         steps_per_epoch=VAL_STEPS,
-#     ),
-#     num_workers=4,
-# )
-
 splits = generate_split_indices(dataset)
 q_train, p_train = splits["train"]
 q_val, p_val = splits["val"]
 q_test, p_test = splits["test"]
+
+# Save test indices for later evaluation
+with open(CHECKPOINT_DIR / "test_indices.txt", "w") as f:
+    for q_idx in q_test:
+        f.write(f"q,{q_idx}\n")
+    for p_idx in p_test:
+        f.write(f"p,{p_idx}\n")
 
 train_loader = DirectLoader(
     dataset,
@@ -112,13 +89,16 @@ train_loader = DirectLoader(
     device=device,
 )
 
+VAL_BATCH_SIZE = 512
+VAL_STEPS = (len(q_val) + len(p_val)) // VAL_BATCH_SIZE + 1
 val_loader = DataLoader(
     dataset,
     batch_sampler=BalancedBatchSampler(
         dataset,
         q_val,
         p_val,
-        batch_size=512,
+        batch_size=VAL_BATCH_SIZE,
+        steps_per_epoch=VAL_STEPS,
     ),
     num_workers=4,
 )
@@ -155,6 +135,7 @@ run_name = f"{model.__class__.__name__}_{datetime.now().strftime('%Y%m%d_%H%M%S'
 checkpoint_manager = CheckpointManager(
     CHECKPOINT_DIR / run_name,
     metric_key="val_map@3",
+    save_interval=5,
 )
 
 writer = SummaryWriter(log_dir=LOG_DIR / run_name)
@@ -170,10 +151,43 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     for i, (inputs, targets) in enumerate(pbar):
-        inputs, targets = inputs.to(device), targets.to(device)
-        optimizer.zero_grad()
-        embeddings = model(inputs)
-        batch_loss = loss_fn(embeddings, targets)
+        # inputs, targets = inputs.to(device), targets.to(device)
+        # optimizer.zero_grad()
+        # embeddings = model(inputs)
+        # batch_loss = loss_fn(embeddings, targets)
+        if epoch >= OHEM_START_EPOCH:
+            with torch.no_grad():
+                embeddings = model(inputs)
+
+                emb_norm = F.normalize(embeddings, p=2, dim=1)
+                prox_norm = F.normalize(loss_fn.proxies, p=2, dim=1)
+
+                sim_matrix = torch.matmul(emb_norm, prox_norm.T)
+
+                true_sims = sim_matrix.clone()
+                true_mask = (targets > 0).bool()
+                true_sims[~true_mask] = -float("inf")
+                # For multi-label, we take the best match among true tags
+                target_sim, _ = true_sims.max(dim=1)
+
+                neg_sims = sim_matrix.clone()
+                neg_sims[true_mask] = -float("inf")
+                hard_neg_sim, _ = neg_sims.max(dim=1)
+
+                difficulty = hard_neg_sim - target_sim
+
+                k = int(inputs.size(0) * OHEM_RATIO)
+                _, hard_indices = torch.topk(difficulty, k)
+
+            final_inputs = inputs[hard_indices]
+            final_targets = targets[hard_indices]
+
+        else:
+            final_inputs = inputs
+            final_targets = targets
+
+        final_embeddings = model(final_inputs)
+        batch_loss = loss_fn(final_embeddings, final_targets)
         batch_loss.backward()
         optimizer.step()
         scheduler.step()
