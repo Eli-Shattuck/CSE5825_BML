@@ -168,7 +168,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         # check if the first index of targest is set to 1 (indicating a quiet board)
         is_puzzle_mask = targets[:, 0] == 0
         puzzle_inputs = inputs[is_puzzle_mask]
-        puzzle_targets = targets[is_puzzle_mask]
+        puzzle_targets = targets[is_puzzle_mask][:, 1:]
 
         optimizer.zero_grad()
         embeddings, puzzle_logits = model(inputs)
