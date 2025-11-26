@@ -140,83 +140,57 @@ class DirectLoader:
 
         n_total = len(dataset)
 
-        # --- 1. PRE-ALLOCATE GPU MEMORY ---
-        # We allocate the massive tensors directly on the GPU to avoid fragmentation
-        # Shape: (N, 12, 8, 8) for boards, (N, 16) for labels
         self.all_boards = torch.empty(
-            (n_total, 12, 8, 8), dtype=torch.float32, device=device
+            (n_total, 17, 8, 8), dtype=torch.float32, device=device
         )
         self.all_labels = torch.empty((n_total, 16), dtype=torch.float32, device=device)
 
-        # --- 2. LOAD QUIET DATA (Index 0 to n_quiet) ---
         n_quiet = dataset.n_quiet
         n_puzzles = dataset.n_puzzles
         puzzle_offset = n_quiet
 
-        # Process in chunks to prevent CPU RAM OOM
         pbar = tqdm(total=n_quiet + n_puzzles, desc="Loading Boards to Device")
         for i in range(0, n_quiet, chunk_size):
             pbar.update(min(chunk_size, n_quiet - i))
             end = min(i + chunk_size, n_quiet)
 
-            # A. Get packed chunk
             packed_chunk = dataset.quiet_boards[i:end]
-
-            # B. Unpack (CPU Intensive)
-            # We assume packed_to_tensor returns a numpy array or tensor
             unpacked_chunk = np.array([packed_to_tensor(b) for b in packed_chunk])
 
-            # C. Move to GPU slot
             self.all_boards[i:end] = torch.from_numpy(unpacked_chunk).to(device)
 
-            # D. Create Labels [1, 0, ...0]
-            # We can fill this directly on GPU
             self.all_labels[i:end, 0] = 1.0
             self.all_labels[i:end, 1:] = 0.0
 
-        # --- 3. LOAD PUZZLE DATA (Index n_quiet to n_total) ---
         for i in range(0, n_puzzles, chunk_size):
             pbar.update(min(chunk_size, n_puzzles - i))
-            # Relative indices for puzzle arrays
             rel_start = i
             rel_end = min(i + chunk_size, n_puzzles)
             count = rel_end - rel_start
 
-            # Global indices for GPU tensors
             global_start = puzzle_offset + rel_start
             global_end = puzzle_offset + rel_end
 
-            # A. Get packed chunk
             packed_chunk = dataset.puzzle_boards[rel_start:rel_end]
-
-            # B. Unpack
             unpacked_chunk = np.array([packed_to_tensor(b) for b in packed_chunk])
 
-            # C. Move Board to GPU
             self.all_boards[global_start:global_end] = torch.from_numpy(
                 unpacked_chunk
             ).to(device)
 
-            # D. Move Labels to GPU
-            # Labels: [0, tag1, tag2...]
             batch_labels = dataset.puzzle_labels[rel_start:rel_end]
 
-            # Construct (Batch, 16)
             gpu_labels_chunk = torch.zeros((count, 16), device=device)
-            # Copy tags into 1:16
             gpu_labels_chunk[:, 1:] = torch.from_numpy(batch_labels.copy()).to(device)
 
             self.all_labels[global_start:global_end] = gpu_labels_chunk
 
     def __iter__(self):
-        # The sampler runs on CPU, yields lists of indices
         for batch_indices in self.sampler:
-            # 1. Transfer indices to GPU (tiny transfer)
             idx_tensor = torch.tensor(
                 batch_indices, device=self.device, dtype=torch.long
             )
 
-            # 2. Slice GPU tensors (Fast VRAM copy)
             batch_x = self.all_boards[idx_tensor]
             batch_y = self.all_labels[idx_tensor]
 
