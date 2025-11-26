@@ -33,7 +33,7 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 EPOCHS = 50
-LR = 1e-3  # Standard Adam learning rate
+LR = 1e-3
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 NUM_CLASSES = 16
@@ -68,7 +68,11 @@ q_val, p_val = splits["val"]
 train_loader = DirectLoader(
     dataset,
     BalancedBatchSampler(
-        dataset, q_train, p_train, batch_size=BATCH_SIZE, steps_per_epoch=1000
+        dataset,
+        q_train,
+        p_train,
+        batch_size=BATCH_SIZE,
+        steps_per_epoch=1000,
     ),
     device=device,
 )

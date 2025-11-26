@@ -68,6 +68,7 @@ class BaseEmbeddingNet(nn.Module):
         out = F.relu(self.conv_output(out))
         out = out.view(out.size(0), -1)
         out = self.fc(out)
+        x = F.normalize(x, p=2, dim=1)
         return out
 
 

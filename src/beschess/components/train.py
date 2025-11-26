@@ -38,7 +38,7 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 5e-2
+LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 
@@ -63,76 +63,75 @@ dataset = PuzzleDataset(
     puzzle_labels=puzzle_labels,
 )
 
-# Sanity check dataset
-splits = generate_split_indices(dataset, test_split=0.001, val_split=0.001)
-q_train, p_train = splits["train"]
-q_val, p_val = splits["val"]
-q_test, p_test = splits["test"]
-
-train_loader = DataLoader(
-    dataset,
-    batch_sampler=BalancedBatchSampler(
-        dataset,
-        q_val,
-        p_val,
-        batch_size=BATCH_SIZE,
-        steps_per_epoch=10,
-    ),
-    num_workers=4,
-)
-
-VAL_BATCH_SIZE = 512
-VAL_STEPS = (len(q_val) + len(p_val)) // VAL_BATCH_SIZE + 1
-val_loader = DataLoader(
-    dataset,
-    batch_sampler=BalancedBatchSampler(
-        dataset,
-        q_val,
-        p_val,
-        batch_size=VAL_BATCH_SIZE,
-        steps_per_epoch=VAL_STEPS,
-    ),
-    num_workers=4,
-)
-
-# splits = generate_split_indices(dataset)
+# # Sanity check dataset
+# splits = generate_split_indices(dataset, test_split=0.001, val_split=0.001)
 # q_train, p_train = splits["train"]
 # q_val, p_val = splits["val"]
 # q_test, p_test = splits["test"]
 #
-# train_loader = DirectLoader(
+# train_loader = DataLoader(
 #     dataset,
-#     BalancedBatchSampler(
+#     batch_sampler=BalancedBatchSampler(
 #         dataset,
-#         q_train,
-#         p_train,
+#         q_val,
+#         p_val,
 #         batch_size=BATCH_SIZE,
-#         steps_per_epoch=1000,
+#         steps_per_epoch=10,
 #     ),
-#     device=device,
+#     num_workers=4,
 # )
 #
+# VAL_BATCH_SIZE = 512
+# VAL_STEPS = (len(q_val) + len(p_val)) // VAL_BATCH_SIZE + 1
 # val_loader = DataLoader(
 #     dataset,
 #     batch_sampler=BalancedBatchSampler(
 #         dataset,
 #         q_val,
 #         p_val,
-#         batch_size=512,
+#         batch_size=VAL_BATCH_SIZE,
+#         steps_per_epoch=VAL_STEPS,
 #     ),
 #     num_workers=4,
 # )
 
+splits = generate_split_indices(dataset)
+q_train, p_train = splits["train"]
+q_val, p_val = splits["val"]
+q_test, p_test = splits["test"]
+
+train_loader = DirectLoader(
+    dataset,
+    BalancedBatchSampler(
+        dataset,
+        q_train,
+        p_train,
+        batch_size=BATCH_SIZE,
+        steps_per_epoch=1000,
+    ),
+    device=device,
+)
+
+val_loader = DataLoader(
+    dataset,
+    batch_sampler=BalancedBatchSampler(
+        dataset,
+        q_val,
+        p_val,
+        batch_size=512,
+    ),
+    num_workers=4,
+)
+
 model = SEResEmbeddingNet(
     embedding_dim=EMBEDDING_DIM,
     num_blocks=10,
-    reduction=16,
 ).to(device)
 
 loss_fn = ProxyAnchor(
     n_classes=16,
     embedding_dim=EMBEDDING_DIM,
-    margin=0.5,
+    margin=0.1,
     alpha=32,
 ).to(device)
 
