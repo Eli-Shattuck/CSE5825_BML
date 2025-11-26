@@ -60,7 +60,8 @@ dataset = PuzzleDataset(
     puzzle_labels=puzzle_labels,
 )
 
-splits = generate_split_indices(dataset)
+# Sanity check dataset
+splits = generate_split_indices(dataset, test_split=0.001, val_split=0.001)
 q_train, p_train = splits["train"]
 q_val, p_val = splits["val"]
 q_test, p_test = splits["test"]
@@ -69,8 +70,8 @@ train_loader = DirectLoader(
     dataset,
     BalancedBatchSampler(
         dataset,
-        q_train,
-        p_train,
+        q_val,
+        p_val,
         batch_size=BATCH_SIZE,
         steps_per_epoch=1000,
     ),
@@ -88,6 +89,35 @@ val_loader = DataLoader(
     shuffle=False,
     num_workers=4,
 )
+
+# splits = generate_split_indices(dataset)
+# q_train, p_train = splits["train"]
+# q_val, p_val = splits["val"]
+# q_test, p_test = splits["test"]
+#
+# train_loader = DirectLoader(
+#     dataset,
+#     BalancedBatchSampler(
+#         dataset,
+#         q_train,
+#         p_train,
+#         batch_size=BATCH_SIZE,
+#         steps_per_epoch=1000,
+#     ),
+#     device=device,
+# )
+#
+# val_loader = DataLoader(
+#     dataset,
+#     sampler=BalancedBatchSampler(
+#         dataset,
+#         q_val,
+#         p_val,
+#         batch_size=512,
+#     ),
+#     shuffle=False,
+#     num_workers=4,
+# )
 
 model = SEResEmbeddingNet(
     embedding_dim=EMBEDDING_DIM,
