@@ -89,7 +89,7 @@ def main():
     print("Bit-Packing Boards (Int8)...")
     # Pre-allocate (N, 64) array
     num_samples = len(df)
-    boards_packed = np.zeros((num_samples, 64), dtype=np.int8)
+    boards_packed = np.zeros((num_samples, 69), dtype=np.int8)
 
     # Loop with progress bar
     for i, (fen, move_str) in tqdm(

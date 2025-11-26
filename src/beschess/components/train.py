@@ -77,12 +77,14 @@ train_loader = DirectLoader(
     device=device,
 )
 
-val_indices = np.concatenate([q_val, p_val]).tolist()
-np.random.shuffle(val_indices)
-val_subset = Subset(dataset, val_indices)
 val_loader = DataLoader(
-    val_subset,
-    batch_size=512,
+    dataset,
+    sampler=BalancedBatchSampler(
+        dataset,
+        q_val,
+        p_val,
+        batch_size=512,
+    ),
     shuffle=False,
     num_workers=4,
 )

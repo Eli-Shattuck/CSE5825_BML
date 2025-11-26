@@ -55,7 +55,7 @@ class BaseEmbeddingNet(nn.Module):
         block: nn.Module,
     ):
         super().__init__()
-        self.conv_input = nn.Conv2d(12, 64, 3, padding=1)
+        self.conv_input = nn.Conv2d(17, 64, 3, padding=1)
         self.bn_input = nn.BatchNorm2d(64)
         self.res_layers = nn.Sequential(*[block for _ in range(num_blocks)])
 

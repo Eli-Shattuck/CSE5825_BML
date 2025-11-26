@@ -21,7 +21,7 @@ NUM_CLASSES = 4
 def dataloader():
     class DummyDataset(torch.utils.data.Dataset):
         def __init__(self):
-            self.samples = [torch.randn(12, 8, 8) for _ in range(NUM_SAMPLES)]
+            self.samples = [torch.randn(17, 8, 8) for _ in range(NUM_SAMPLES)]
             self.labels = []
             for _ in range(NUM_SAMPLES):
                 label = torch.zeros(NUM_CLASSES, dtype=torch.float32)
@@ -45,7 +45,7 @@ def dataloader():
 def zero_dataloader():
     class ZeroDataset(torch.utils.data.Dataset):
         def __init__(self):
-            self.samples = [torch.randn(12, 8, 8) for _ in range(NUM_SAMPLES)]
+            self.samples = [torch.randn(17, 8, 8) for _ in range(NUM_SAMPLES)]
             self.labels = [
                 torch.zeros(NUM_CLASSES, dtype=torch.float32)
                 for _ in range(NUM_SAMPLES)
@@ -64,7 +64,7 @@ def zero_dataloader():
 def full_dataloader():
     class FullDataset(torch.utils.data.Dataset):
         def __init__(self):
-            self.samples = [torch.randn(12, 8, 8) for _ in range(NUM_SAMPLES)]
+            self.samples = [torch.randn(17, 8, 8) for _ in range(NUM_SAMPLES)]
             self.labels = [
                 torch.ones(NUM_CLASSES, dtype=torch.float32) for _ in range(NUM_SAMPLES)
             ]
@@ -83,7 +83,7 @@ def test_res_embedding_net():
     embedding_dim = 128
     num_blocks = 3
 
-    x = torch.randn(batch_size, 12, 8, 8)
+    x = torch.randn(batch_size, 17, 8, 8)
     model = ResEmbeddingNet(embedding_dim, num_blocks)
 
     output = model(x)
@@ -96,7 +96,7 @@ def test_se_res_embedding_net():
     embedding_dim = 64
     num_blocks = 3
 
-    x = torch.randn(batch_size, 12, 8, 8)
+    x = torch.randn(batch_size, 17, 8, 8)
     model = SEResEmbeddingNet(embedding_dim, num_blocks)
 
     output = model(x)

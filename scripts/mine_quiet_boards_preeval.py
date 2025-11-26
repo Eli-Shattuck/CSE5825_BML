@@ -52,7 +52,7 @@ def get_piece_count(fen_str):
 
 
 def quiet_boards_preeval(zstd_json_path, output_path):
-    boards_packed = np.zeros((TRUE_TOTAL_SAMPLES, 64), dtype=np.int8)
+    boards_packed = np.zeros((TRUE_TOTAL_SAMPLES, 69), dtype=np.int8)
 
     current_samples = 0
     seen_hashes = set()
@@ -147,5 +147,5 @@ def quiet_boards_preeval(zstd_json_path, output_path):
 
 if __name__ == "__main__":
     raw_file = DATA_PATH / "raw" / "lichess_db_eval.jsonl.zst"
-    out_file = DATA_PATH / "processed" / "quiet_boards_stratified.npy"
+    out_file = DATA_PATH / "processed" / "quiet_boards_preeval.npy"
     quiet_boards_preeval(raw_file, out_file)
