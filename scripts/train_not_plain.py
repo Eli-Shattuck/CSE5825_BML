@@ -54,7 +54,7 @@ MODEL_LR = 1e-4
 LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
-LAMBDA_BCE = 0.5
+LAMBDA_BCE = 5.0
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
