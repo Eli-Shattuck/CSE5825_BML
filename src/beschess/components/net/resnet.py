@@ -1,4 +1,5 @@
 import torch
+import copy
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -57,7 +58,9 @@ class BaseEmbeddingNet(nn.Module):
         super().__init__()
         self.conv_input = nn.Conv2d(17, 64, 3, padding=1)
         self.bn_input = nn.BatchNorm2d(64)
-        self.res_layers = nn.Sequential(*[block for _ in range(num_blocks)])
+        self.res_layers = nn.Sequential(
+            *[copy.deepcopy(block) for _ in range(num_blocks)]
+        )
 
         self.conv_output = nn.Conv2d(64, 32, 1)
         self.fc = nn.Linear(32 * 8 * 8, embedding_dim)
@@ -68,7 +71,7 @@ class BaseEmbeddingNet(nn.Module):
         out = F.relu(self.conv_output(out))
         out = out.view(out.size(0), -1)
         out = self.fc(out)
-        x = F.normalize(x, p=2, dim=1)
+        out = F.normalize(out, p=2, dim=1)
         return out
 
 
