@@ -1,5 +1,6 @@
-import torch
 import copy
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -95,7 +96,9 @@ class MultiTaskEmbeddingNet(nn.Module):
         super().__init__()
         self.conv_input = nn.Conv2d(17, 64, 3, padding=1)
         self.bn_input = nn.BatchNorm2d(64)
-        self.res_layers = nn.Sequential(*[block for _ in range(num_blocks)])
+        self.res_layers = nn.Sequential(
+            *[copy.deepcopy(block) for _ in range(num_blocks)]
+        )
         self.conv_output = nn.Conv2d(64, 32, 1)
         self.flat_dim = 32 * 8 * 8
         self.embedding_head = nn.Linear(32 * 8 * 8, embedding_dim)
