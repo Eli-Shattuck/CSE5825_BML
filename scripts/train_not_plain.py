@@ -34,21 +34,14 @@ from beschess.data.embedding import (
 )
 
 TAG_NAMES = [
-    "bishopEndgame",
-    "diagonalMate",
-    "discoveredAttack",
-    "fork",
-    "knightEndgame",
-    "knightMate",
-    "orthogonalMate",
-    "pawnEndgame",
-    "pin",
-    "queenEndgame",
-    "queenMate",
-    "queenRookEndgame",
-    "rookEndgame",
-    "skewer",
-    "xRayAttack",
+    "LinearAttack",
+    "DoubleAttack",
+    "MatingNet",
+    "Overload",
+    "Displacement",
+    "Sacrifice",
+    "EndgameTactic",
+    "PieceEndgame",
 ]
 
 SEED = 42
@@ -136,7 +129,7 @@ model = MultiTaskSEResEmbeddingNet(
 ).to(device)
 
 loss_fn_emb = ProxyAnchor(
-    n_classes=15,
+    n_classes=len(TAG_NAMES),
     embedding_dim=EMBEDDING_DIM,
     margin=0.1,
     alpha=32,
@@ -239,6 +232,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
     similarity_matrix = similarity_matrix.cpu()
     val_labels = val_labels.cpu()
+    val_labels = val_labels[:, 1:]
 
     k_list = [1, 3]
     max_k = max(k_list)

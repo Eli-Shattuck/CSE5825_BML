@@ -74,21 +74,14 @@ def verify():
     # We define tag names (Update this list to match your actual 15 tags!)
     tag_names = [
         "quiet",
-        "bishopEndgame",
-        "diagonalMate",
-        "discoveredAttack",
-        "fork",
-        "knightEndgame",
-        "knightMate",
-        "orthogonalMate",
-        "pawnEndgame",
-        "pin",
-        "queenEndgame",
-        "queenMate",
-        "queenRookEndgame",
-        "rookEndgame",
-        "skewer",
-        "xRayAttack",
+        "LinearAttack",
+        "DoubleAttack",
+        "MatingNet",
+        "Overload",
+        "Displacement",
+        "Sacrifice",
+        "EndgameTactic",
+        "PieceEndgame",
     ]
 
     print("\n--- RESULTS ---")

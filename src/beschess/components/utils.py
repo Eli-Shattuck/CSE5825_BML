@@ -267,7 +267,7 @@ def plot_tsne_embeddings(
         ax.scatter(p[0], p[1], c="black", marker="X", s=150, zorder=10)
 
         # Safe tag name indexing
-        tag_name = TAG_NAMES[i] if i < len(TAG_NAMES) else str(i)
+        tag_name = tag_names[i] if i < len(tag_names) else str(i)
 
         ax.text(
             p[0],
