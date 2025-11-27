@@ -1,5 +1,6 @@
 from pathlib import Path
 import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -183,8 +184,9 @@ def plot_tsne_embeddings(
     embeddings_2d: np.ndarray,
     labels: np.ndarray,
     proxies_2d: np.ndarray,
-    probs: np.ndarray,  # New Argument
+    probs: np.ndarray,
     title: str = "Latent Space",
+    tag_names: list[str] = TAG_NAMES,
 ):
     """
     Visualizes t-SNE results.

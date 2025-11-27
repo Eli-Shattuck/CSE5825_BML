@@ -33,6 +33,24 @@ from beschess.data.embedding import (
     generate_split_indices,
 )
 
+TAG_NAMES = [
+    "bishopEndgame",
+    "diagonalMate",
+    "discoveredAttack",
+    "fork",
+    "knightEndgame",
+    "knightMate",
+    "orthogonalMate",
+    "pawnEndgame",
+    "pin",
+    "queenEndgame",
+    "queenMate",
+    "queenRookEndgame",
+    "rookEndgame",
+    "skewer",
+    "xRayAttack",
+]
+
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -40,7 +58,7 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 1e-2
+LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 2048
 LAMBDA_BCE = 0.5
@@ -271,6 +289,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             proxy_embeddings,
             all_probs,
             title=f"Epoch {epoch + 1} Embeddings",
+            tag_names=TAG_NAMES,
         )
         writer.add_figure("Embeddings/TSNE", fig, global_step)
         plt.close(fig)
