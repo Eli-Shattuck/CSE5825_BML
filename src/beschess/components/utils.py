@@ -616,6 +616,9 @@ def evaluate_proxy_cos(
             all_embeddings.append(embeddings.cpu())
             all_labels.append(labels)
 
+    std_dev = torch.std(torch.cat(all_embeddings, dim=0), dim=0).mean().item()
+    print(f"Embedding Std Dev: {std_dev:.4f}")
+
     model.train(model_is_train)
 
     all_embeddings = torch.cat(all_embeddings, dim=0)

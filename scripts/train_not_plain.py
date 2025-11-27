@@ -131,8 +131,8 @@ model = MultiTaskSEResEmbeddingNet(
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
     embedding_dim=EMBEDDING_DIM,
-    margin=0.1,
-    alpha=32,
+    margin=0.4,
+    alpha=8,
 ).to(device)
 # warm_start_quiet_proxy(model, loss_fn_emb, train_loader, device)
 

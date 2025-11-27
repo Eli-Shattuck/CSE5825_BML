@@ -28,7 +28,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # )
 CHECKPOINT = (
     CHECKPOINT_DIR
-    / "MultiTaskSEResEmbeddingNet_20251126_195735"
+    / "MultiTaskSEResEmbeddingNet_20251127_005705"
     / "best_checkpoint.pth"
 )
 N_SAMPLES = 5000  # Load a small chunk to test
@@ -59,9 +59,10 @@ def verify():
     print("Generating embeddings...")
     embeddings = []
     # Process in one batch for speed (5000 fits in VRAM)
-    puzzle_tensors = np.array([packed_to_tensor(b) for b in boards_packed])
-    quiet_tensors = np.array([packed_to_tensor(b) for b in quiet_boards_packed])
-    tensors = np.concatenate((puzzle_tensors, quiet_tensors), axis=0)
+    # puzzle_tensors = np.array([packed_to_tensor(b) for b in boards_packed])
+    # quiet_tensors = np.array([packed_to_tensor(b) for b in quiet_boards_packed])
+    # tensors = np.concatenate((puzzle_tensors, quiet_tensors), axis=0)
+    tensors = np.array([packed_to_tensor(b) for b in boards_packed])
     inputs = torch.from_numpy(tensors).float().to(DEVICE)
 
     with torch.no_grad():
@@ -78,31 +79,31 @@ def verify():
     # 5. Visual Inspection
     # We define tag names (Update this list to match your actual 15 tags!)
     tag_names = [
-        # "quiet",
-        # "LinearAttack",
-        # "DoubleAttack",
-        # "MatingNet",
-        # "Overload",
-        # "Displacement",
-        # "Sacrifice",
-        # "EndgameTactic",
-        # "PieceEndgame",
         "quiet",
-        "bishopEndgame",
-        "diagonalMate",
-        "discoveredAttack",
-        "fork",
-        "knightEndgame",
-        "knightMate",
-        "orthogonalMate",
-        "pawnEndgame",
-        "pin",
-        "queenEndgame",
-        "queenMate",
-        "queenRookEndgame",
-        "rookEndgame",
-        "skewer",
-        "xRayAttack",
+        "LinearAttack",
+        "DoubleAttack",
+        "MatingNet",
+        "Overload",
+        "Displacement",
+        "Sacrifice",
+        "EndgameTactic",
+        "PieceEndgame",
+        # "quiet",
+        # "bishopEndgame",
+        # "diagonalMate",
+        # "discoveredAttack",
+        # "fork",
+        # "knightEndgame",
+        # "knightMate",
+        # "orthogonalMate",
+        # "pawnEndgame",
+        # "pin",
+        # "queenEndgame",
+        # "queenMate",
+        # "queenRookEndgame",
+        # "rookEndgame",
+        # "skewer",
+        # "xRayAttack",
     ]
 
     print("\n--- RESULTS ---")
