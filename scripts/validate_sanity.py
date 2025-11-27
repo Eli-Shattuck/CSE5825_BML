@@ -21,9 +21,14 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # CHECKPOINT = (
 #     CHECKPOINT_DIR / "SEResEmbeddingNet_20251126_161405" / "best_checkpoint.pth"
 # )
+# CHECKPOINT = (
+#     CHECKPOINT_DIR
+#     / "MultiTaskSEResEmbeddingNet_20251126_173236"
+#     / "best_checkpoint.pth"
+# )
 CHECKPOINT = (
     CHECKPOINT_DIR
-    / "MultiTaskSEResEmbeddingNet_20251126_173236"
+    / "MultiTaskSEResEmbeddingNet_20251126_195735"
     / "best_checkpoint.pth"
 )
 N_SAMPLES = 5000  # Load a small chunk to test
@@ -73,15 +78,31 @@ def verify():
     # 5. Visual Inspection
     # We define tag names (Update this list to match your actual 15 tags!)
     tag_names = [
+        # "quiet",
+        # "LinearAttack",
+        # "DoubleAttack",
+        # "MatingNet",
+        # "Overload",
+        # "Displacement",
+        # "Sacrifice",
+        # "EndgameTactic",
+        # "PieceEndgame",
         "quiet",
-        "LinearAttack",
-        "DoubleAttack",
-        "MatingNet",
-        "Overload",
-        "Displacement",
-        "Sacrifice",
-        "EndgameTactic",
-        "PieceEndgame",
+        "bishopEndgame",
+        "diagonalMate",
+        "discoveredAttack",
+        "fork",
+        "knightEndgame",
+        "knightMate",
+        "orthogonalMate",
+        "pawnEndgame",
+        "pin",
+        "queenEndgame",
+        "queenMate",
+        "queenRookEndgame",
+        "rookEndgame",
+        "skewer",
+        "xRayAttack",
     ]
 
     print("\n--- RESULTS ---")

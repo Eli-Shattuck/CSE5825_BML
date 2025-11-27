@@ -5,6 +5,8 @@ from tqdm import tqdm
 
 from ..utils import packed_to_tensor
 
+N_PUZZLE_LABELS = 15
+
 
 class PuzzleDataset(torch.utils.data.Dataset):
     def __init__(
@@ -25,7 +27,7 @@ class PuzzleDataset(torch.utils.data.Dataset):
         return self.n_quiet + self.n_puzzles
 
     def __getitem__(self, idx):
-        label = torch.zeros(16, dtype=torch.float32)
+        label = torch.zeros(N_PUZZLE_LABELS + 1, dtype=torch.float32)
         if idx < self.n_quiet:
             board_packed = self.quiet_boards[idx]
             label[0] = 1.0
@@ -52,7 +54,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
         quiet_indices: list,
         puzzle_indices: list,
         batch_size: int,
-        quiet_ratio: float = 0.25,
+        quiet_ratio: float = 0.5,
         steps_per_epoch: int = 1000,
     ):
         self.dataset = dataset
@@ -66,7 +68,7 @@ class BalancedBatchSampler(torch.utils.data.BatchSampler):
         self.puzzle_offsets = dataset.n_quiet
 
         raw_labels = dataset.get_puzzle_labels()
-        self.label_map = {i: [] for i in range(15)}
+        self.label_map = {i: [] for i in range(N_PUZZLE_LABELS)}
 
         pbar = tqdm(total=len(puzzle_indices), desc="Building label map")
         for global_idx in puzzle_indices:
