@@ -710,35 +710,30 @@ def compute_proxy_map(
     assert top_indices.size(0) == labels.size(0)
     assert top_indices.size(1) >= max(k_values)
 
-    n_samples = labels.size(0)
+    device = top_indices.device
+    _, max_k = top_indices.shape
 
-    maps = {k: 0.0 for k in k_values}
-    k_checkpoints = set(k_values)
+    relevance = torch.gather(labels, 1, top_indices)
 
-    for i in range(n_samples):
-        true_set = set(labels[i].nonzero(as_tuple=False).view(-1).tolist())
-        num_true = len(true_set)
+    cumsum_hits = torch.cumsum(relevance, dim=1)
+    ranks = torch.arange(1, max_k + 1, device=device).float()
 
-        if num_true == 0:
-            continue
+    precisions = cumsum_hits / ranks
 
-        hits = 0
-        sum_precisions = 0.0
+    ap_contributions = precisions * relevance
 
-        pred_labels = top_indices[i].tolist()
-        for j, pred_idx in enumerate(pred_labels):
-            current_k = j + 1
-            if pred_idx in true_set:
-                hits += 1
-                sum_precisions += hits / current_k
+    total_true = labels.sum(dim=1)
+    total_true = torch.clamp(total_true, min=1)
 
-            if current_k in k_checkpoints:
-                denom = min(num_true, current_k)
-                if denom > 0:
-                    maps[current_k] += sum_precisions / denom
+    maps = {}
 
     for k in k_values:
-        maps[k] /= n_samples
+        sum_precisions = ap_contributions[:, :k].sum(dim=1)
+        denominator = torch.min(total_true, torch.tensor(k, device=device))
+
+        ap = sum_precisions / denominator
+
+        maps[k] = ap.mean().item()
 
     return maps
 

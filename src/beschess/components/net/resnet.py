@@ -111,7 +111,7 @@ class MultiTaskEmbeddingNet(nn.Module):
     def forward(self, x: torch.Tensor):
         x = F.relu(self.bn_input(self.conv_input(x)))
         x = self.res_layers(x)
-        x = F.relu(self.conv_output(x))
+        x = self.conv_output(x)
         features = x.view(x.size(0), -1)
         emb = self.embedding_head(features)
         emb = F.normalize(emb, p=2, dim=1)

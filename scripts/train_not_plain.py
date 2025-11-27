@@ -128,6 +128,12 @@ model = MultiTaskSEResEmbeddingNet(
     num_blocks=10,
 ).to(device)
 
+for m in model.modules():
+    if isinstance(m, nn.Linear):
+        nn.init.orthogonal_(m.weight)
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
     embedding_dim=EMBEDDING_DIM,
