@@ -53,7 +53,7 @@ EPOCHS = 50
 MODEL_LR = 1e-4
 LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
-BATCH_SIZE = 2048
+BATCH_SIZE = 4096
 LAMBDA_BCE = 0.5
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -96,7 +96,7 @@ train_loader = DirectLoader(
         q_train,
         p_train,
         batch_size=BATCH_SIZE,
-        steps_per_epoch=1000,
+        steps_per_epoch=2000,
     ),
     device=device,
 )

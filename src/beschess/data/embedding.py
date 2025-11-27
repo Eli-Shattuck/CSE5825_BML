@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from ..utils import packed_to_tensor
 
-N_PUZZLE_LABELS = 15
+N_PUZZLE_LABELS = 8
 
 
 class PuzzleDataset(torch.utils.data.Dataset):
@@ -146,7 +146,9 @@ class DirectLoader:
         self.all_boards = torch.empty(
             (n_total, 17, 8, 8), dtype=torch.float32, device=device
         )
-        self.all_labels = torch.empty((n_total, 16), dtype=torch.float32, device=device)
+        self.all_labels = torch.empty(
+            (n_total, N_PUZZLE_LABELS + 1), dtype=torch.float32, device=device
+        )
 
         n_quiet = dataset.n_quiet
         n_puzzles = dataset.n_puzzles
@@ -183,7 +185,7 @@ class DirectLoader:
 
             batch_labels = dataset.puzzle_labels[rel_start:rel_end]
 
-            gpu_labels_chunk = torch.zeros((count, 16), device=device)
+            gpu_labels_chunk = torch.zeros((count, N_PUZZLE_LABELS + 1), device=device)
             gpu_labels_chunk[:, 1:] = torch.from_numpy(batch_labels.copy()).to(device)
 
             self.all_labels[global_start:global_end] = gpu_labels_chunk
