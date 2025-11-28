@@ -36,7 +36,6 @@ class StockFish:
 def is_puzzle(
     stockfish: StockFish,
     board: chess.Board,
-    amax_cp: int,
     amax_cp_diff: int,
 ):
     if stockfish.config.depth is None or stockfish.config.nodes is None:
@@ -58,12 +57,15 @@ def is_puzzle(
     if len(info) < 2:
         return False
 
+    if "score" not in info[0] or "score" not in info[1]:
+        raise ValueError("Engine analysis did not return scores for both variations.")
+
     s1 = info[0]["score"].relative.score(mate_score=10000)
     s2 = info[1]["score"].relative.score(mate_score=10000)
 
     logging.info(f"Score 1: {s1}, Score 2: {s2}")
 
-    return abs(s1) >= amax_cp and abs(s2 - s1) >= amax_cp_diff
+    return abs(s2 - s1) >= amax_cp_diff
 
 
 # --- LEGACY STOCKFISH ANALYSIS FUNCTION ---

@@ -8,10 +8,10 @@ def plot_distance_distributions(embeddings, labels, n_samples=5000):
     """Generates the Positive vs Negative Pair Histogram"""
     print("Generating Distance Histogram...")
 
-    # Subsample for speed
     indices = np.random.choice(len(embeddings), n_samples, replace=False)
     X = embeddings[indices]
-    y = np.argmax(labels[indices], axis=1)  # Use primary tag for simplification
+    # Mulihot label
+    y = labels[indices]
 
     # Compute pairwise distances
     dists = cosine_distances(X)
@@ -19,16 +19,15 @@ def plot_distance_distributions(embeddings, labels, n_samples=5000):
     pos_dists = []
     neg_dists = []
 
-    # Collect distances
+    # Collect distances dealing with multi-hot labels
     for i in range(len(X)):
         for j in range(i + 1, len(X)):
-            d = dists[i, j]
-            if y[i] == y[j]:
-                pos_dists.append(d)
-            elif y[i] != y[j]:  # Different tag
-                neg_dists.append(d)
+            shared_tags = np.intersect1d(np.where(y[i] > 0)[0], np.where(y[j] > 0)[0])
+            if len(shared_tags) > 0:
+                pos_dists.append(dists[i, j])
+            else:
+                neg_dists.append(dists[i, j])
 
-    # Plot
     plt.figure(figsize=(10, 6))
     sns.kdeplot(pos_dists, fill=True, color="g", label="Same Tag (Positive)", alpha=0.5)
     sns.kdeplot(neg_dists, fill=True, color="r", label="Diff Tag (Negative)", alpha=0.5)

@@ -5,25 +5,21 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
-from pytorch_metric_learning import losses
-import torch.nn.functional as F
-
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
-from beschess.components.net.resnet import SEResEmbeddingNet
+from beschess.components.net.resnet import MultiTaskSEResEmbeddingNet
 from beschess.components.utils import (
     CheckpointManager,
-    warm_start_quiet_proxy,
     compute_proxy_hitrate,
     compute_proxy_map,
-    compute_quiet_margin,
     compute_tsne_embeddings,
-    plot_tsne_embeddings,
     evaluate_proxy_cos,
+    plot_tsne_embeddings,
 )
 from beschess.data.embedding import (
     BalancedBatchSampler,
@@ -32,6 +28,17 @@ from beschess.data.embedding import (
     generate_split_indices,
 )
 
+TAG_NAMES = [
+    "LinearAttack",
+    "DoubleAttack",
+    "MatingNet",
+    "Overload",
+    "Displacement",
+    "Sacrifice",
+    "EndgameTactic",
+    "PieceEndgame",
+]
+
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -39,9 +46,10 @@ torch.manual_seed(SEED)
 
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 1e-2
+LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
+LAMBDA_BCE = 5.0
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
@@ -83,7 +91,7 @@ train_loader = DirectLoader(
         q_train,
         p_train,
         batch_size=BATCH_SIZE,
-        steps_per_epoch=1000,
+        steps_per_epoch=2000,
     ),
     device=device,
 )
@@ -102,23 +110,38 @@ val_loader = DataLoader(
     num_workers=4,
 )
 
-model = SEResEmbeddingNet(
+val_puzzle_subset = Subset(dataset, p_val)
+val_puzzle_loader = DataLoader(
+    val_puzzle_subset,
+    batch_size=VAL_BATCH_SIZE,
+    shuffle=False,
+    num_workers=4,
+)
+
+model = MultiTaskSEResEmbeddingNet(
     embedding_dim=EMBEDDING_DIM,
     num_blocks=10,
 ).to(device)
 
-loss_fn = ProxyAnchor(
-    n_classes=16,
+for m in model.modules():
+    if isinstance(m, nn.Linear):
+        nn.init.orthogonal_(m.weight)
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+
+loss_fn_emb = ProxyAnchor(
+    n_classes=len(TAG_NAMES),
     embedding_dim=EMBEDDING_DIM,
-    margin=0.1,
-    alpha=32,
+    margin=0.4,
+    alpha=8,
 ).to(device)
-warm_start_quiet_proxy(model, loss_fn, train_loader, device)
+
+loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
 
 optimizer = torch.optim.AdamW(
     [
         {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
-        {"params": loss_fn.parameters(), "lr": LOSS_LR, "weight_decay": 0},
+        {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )
 
@@ -143,8 +166,9 @@ global_step = 0
 
 for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     model.train()
-    loss_fn.train()
+    loss_fn_emb.train()
     total_train_loss = 0.0
+    total_binary_acc = 0.0
 
     pbar = tqdm(
         train_loader, total=len(train_loader), desc="Training Batches", leave=False
@@ -152,24 +176,44 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
     for i, (inputs, targets) in enumerate(pbar):
         inputs, targets = inputs.to(device), targets.to(device)
+        # check if the first index of targest is set to 1 (indicating a quiet board)
+        is_puzzle_mask = targets[:, 0] == 0
+        puzzle_inputs = inputs[is_puzzle_mask]
+        puzzle_targets = targets[is_puzzle_mask][:, 1:]
+
         optimizer.zero_grad()
-        embeddings = model(inputs)
-        batch_loss = loss_fn(embeddings, targets)
-        batch_loss.backward()
+        embeddings, puzzle_logits = model(inputs)
+        if puzzle_inputs.size(0) == 0:
+            loss_emd = torch.tensor(0.0, device=device)
+        else:
+            puzzle_embeddings = embeddings[is_puzzle_mask]
+            loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
+
+        loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
+        batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce)
+        batch_loss_emd.backward()
+
         optimizer.step()
         scheduler.step()
 
-        total_train_loss += batch_loss.item()
+        total_train_loss += batch_loss_emd.item()
+
+        preds = (torch.sigmoid(puzzle_logits) > 0.5).float()
+        acc = (preds == is_puzzle_mask.float().unsqueeze(1)).float().mean()
+        total_binary_acc += acc.item()
 
         if global_step % 50 == 0:
-            writer.add_scalar("Train/Loss", batch_loss.item(), global_step)
+            writer.add_scalar("Train/Loss_Total", batch_loss_emd.item(), global_step)
+            writer.add_scalar("Train/Loss_Embedding", loss_emd.item(), global_step)
+            writer.add_scalar("Train/Loss_BCE", loss_bce.item(), global_step)
+            writer.add_scalar("Train/Binary_Acc", acc.item(), global_step)
 
             lrs = scheduler.get_last_lr()
             writer.add_scalar("Train/LR_Backbone", lrs[0], global_step)
             writer.add_scalar("Train/LR_Proxy", lrs[1], global_step)
 
             with torch.no_grad():
-                proxy_norm = torch.norm(loss_fn.proxies, dim=1).mean()
+                proxy_norm = torch.norm(loss_fn_emb.proxies, dim=1).mean()
                 writer.add_scalar("Debug/Proxy_Norms", proxy_norm, global_step)
 
         global_step += 1
@@ -180,11 +224,12 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     total_val_loss = 0.0
 
     similarity_matrix, val_labels = evaluate_proxy_cos(
-        model, loss_fn, val_loader, device
+        model, loss_fn_emb, val_puzzle_loader, device
     )
 
     similarity_matrix = similarity_matrix.cpu()
     val_labels = val_labels.cpu()
+    val_labels = val_labels[:, 1:]
 
     k_list = [1, 3]
     max_k = max(k_list)
@@ -192,25 +237,12 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
     hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
     val_map = compute_proxy_map(top_indices, val_labels, k_list)
-    avg_margin, margin_acc = compute_quiet_margin(similarity_matrix, val_labels)
-
-    avg_val_loss = 0.0
-    with torch.no_grad():
-        for inputs, targets in val_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            embeddings = model(inputs)
-            batch_loss = loss_fn(embeddings, targets)
-            avg_val_loss += batch_loss.item()
-
-    avg_val_loss /= len(val_loader)
 
     metrics = {
         "val_map@1": val_map[1],
         "val_map@3": val_map[3],
         "val_hitrate@1": hitrate[1],
         "val_hitrate@3": hitrate[3],
-        "val_quiet_margin": avg_margin,
-        "val_quiet_margin_acc": margin_acc,
         "train_loss": avg_train_loss,
     }
 
@@ -218,15 +250,10 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
     writer.add_scalar("Val/HitRate@3", hitrate[3], global_step)
-    writer.add_scalar("Val/Quiet_Margin", avg_margin, global_step)
-    writer.add_scalar("Val/Quiet_Acc", margin_acc, global_step)
-
-    writer.add_scalar("Loss/Epoch_Avg", avg_train_loss, global_step)
-    writer.add_scalar("Loss/Epoch_Avg", avg_val_loss, global_step)
 
     checkpoint_manager.check(
         model,
-        loss_fn,
+        loss_fn_emb,
         optimizer,
         scheduler,
         metrics,
@@ -234,10 +261,10 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     if epoch % 5 == 0 or epoch == EPOCHS - 1:
-        board_embeddings, board_labels, proxy_embeddings, proxy_labels = (
+        board_embeddings, board_labels, proxy_embeddings, proxy_labels, all_probs = (
             compute_tsne_embeddings(
                 model,
-                loss_fn,
+                loss_fn_emb,
                 val_loader,
                 device,
             )
@@ -246,7 +273,9 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             board_embeddings,
             board_labels,
             proxy_embeddings,
+            all_probs,
             title=f"Epoch {epoch + 1} Embeddings",
+            tag_names=TAG_NAMES,
         )
         writer.add_figure("Embeddings/TSNE", fig, global_step)
         plt.close(fig)
@@ -255,8 +284,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         f"Epoch {epoch + 1}/{EPOCHS} | "
         f"Train Loss: {avg_train_loss:.4f} | "
         f"MAP@3: {val_map[3]:.4f} | "
-        f"HR@3: {hitrate[3]:.4f} | "
-        f"Margin: {avg_margin:.4f}"
+        f"HR@1: {hitrate[1]:.4f} | "
     )
 
 writer.close()

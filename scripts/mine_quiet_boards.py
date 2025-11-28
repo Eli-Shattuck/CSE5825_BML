@@ -2,18 +2,16 @@ from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
-from beschess.utils import board_to_packed
 
 from beschess.analysis import StockFish, StockFishConfig, is_puzzle
 from beschess.load.load_game import load_game_zstd
+from beschess.utils import board_to_packed
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data"
 
 TARGET_SAMPLES = 1_000_000
-# TARGET_SAMPLES = 10
 
 MIN_ELO = 1501
-MAX_EVAL_CP = 50
 MAX_DIFF_CP = 30
 MIN_ply = 30
 MAX_ply = 80
@@ -57,32 +55,30 @@ def mine_quiet_boards(pgn_path, output_path, total=None):
             if "Blitz" in event or "Bullet" in event:
                 continue
 
-            # Filter 1: Only look at drawn/close games to save time
+            # WARN:
             if game.headers.get("Result") not in ["1/2-1/2", "*"]:
                 continue
 
             board = game.board()
 
-            # Iterate through moves
             for ply, move in enumerate(game.mainline_moves()):
                 board.push(move)
 
-                # Filter 2: Window & Checks
+                # Window & Checks
                 if ply < MIN_ply or ply > MAX_ply:
                     continue
                 if board.is_check():
                     continue
 
-                # # Filter 3: Random Sampling (Don't take every move from one game)
+                # Random Sampling
                 if np.random.random() > 0.1:
                     continue
 
-                # Filter 4: Engine Analysis (The Heavy Lift)
+                # Engine Analysis
                 try:
                     if is_puzzle(
                         stockfish,
                         board,
-                        amax_cp=MAX_EVAL_CP,
                         amax_cp_diff=MAX_DIFF_CP,
                     ):
                         continue
@@ -95,6 +91,7 @@ def mine_quiet_boards(pgn_path, output_path, total=None):
                     break
 
                 except Exception as e:
+                    print(f"Engine analysis error: {e}")
                     continue
 
         stockfish.quit()
@@ -112,9 +109,3 @@ if __name__ == "__main__":
         DATA_PATH / "processed" / "quiet_2013-01_boards_packed.npy",
         121_332,
     )
-
-    # mine_quiet_boards(
-    #     DATA_PATH / "raw" / "lichess_db_standard_rated_2019-01.pgn.zst",
-    #     DATA_PATH / "processed" / "quiet_2019-01_boards_packed.npy",
-    #     33_886_899,
-    # )

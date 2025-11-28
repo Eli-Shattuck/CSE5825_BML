@@ -12,7 +12,6 @@ class ProxyAnchor(nn.Module):
         alpha: float = 32.0,
     ):
         super().__init__()
-        # Proxy Anchor Initialization
         self.proxies = torch.nn.Parameter(torch.randn(n_classes, embedding_dim))
         nn.init.kaiming_normal_(self.proxies, mode="fan_out")
 
