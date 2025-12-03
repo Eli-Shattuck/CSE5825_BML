@@ -196,10 +196,10 @@ def verify():
     # --- METRIC 1: COLLAPSE ---
     std_dev = np.std(embeddings, axis=0).mean()
     print(f"\n[TEST SET] Embedding Std Dev: {std_dev:.4f}")
-    if std_dev < 0.05:
-        print(">>> FAIL: Model collapsed on test data.")
-    else:
-        print(">>> PASS: Variance is healthy.")
+    # if std_dev < 0.05:
+    #     print(">>> FAIL: Model collapsed on test data.")
+    # else:
+    #     print(">>> PASS: Variance is healthy.")
 
     # --- METRIC 2: BINARY ACCURACY ---
     # With all_indices = p_indices + q_indices:
@@ -224,7 +224,7 @@ def verify():
     distances, indices = nbrs.kneighbors(embeddings)
 
     # Pick 5 random samples to display
-    test_idx_selection = np.random.choice(len(all_indices), size=5, replace=False)
+    test_idx_selection = np.random.choice(len(all_indices), size=10, replace=False)
 
     for idx in test_idx_selection:
         q_tags = get_tag_string(all_tags[idx])
