@@ -113,11 +113,11 @@ class MultiTaskEmbeddingNet(nn.Module):
         x = self.res_layers(x)
         x = self.conv_output(x)
         features = x.view(x.size(0), -1)
-        emb = self.embedding_head(features)
-        emb = F.normalize(emb, p=2, dim=1)
+        embedding = self.embedding_head(features)
+        embedding = F.normalize(embedding, p=2, dim=1)
         puzzle_logits = self.puzzle_head(features)
 
-        return emb, puzzle_logits
+        return embedding, puzzle_logits
 
 
 class MultiTaskSEResEmbeddingNet(MultiTaskEmbeddingNet):

@@ -1,7 +1,8 @@
-import torch
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
 from pathlib import Path
+
+import numpy as np
+import torch
+from sklearn.neighbors import NearestNeighbors
 
 from beschess.components.net.resnet import MultiTaskSEResEmbeddingNet
 from beschess.data.embedding import PuzzleDataset
@@ -40,8 +41,6 @@ def compute_precision(embeddings, probs, tags, n_puzzles):
     1. Filter neighbors by Confidence > 0.8
     2. Check if the remaining neighbors match the Query Tag
     """
-    print("\n--- RIGOROUS METRICS ---")
-    from sklearn.neighbors import NearestNeighbors
 
     puzzle_embeddings = embeddings[:n_puzzles]
     puzzle_tags = tags[:n_puzzles]

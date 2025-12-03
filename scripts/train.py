@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
 from beschess.components.net.resnet import MultiTaskSEResEmbeddingNet
+from beschess.components.net.vit import MultiTaskViT
 from beschess.components.utils import (
     CheckpointManager,
     compute_proxy_hitrate,
@@ -118,16 +119,24 @@ val_puzzle_loader = DataLoader(
     num_workers=4,
 )
 
-model = MultiTaskSEResEmbeddingNet(
-    embedding_dim=EMBEDDING_DIM,
-    num_blocks=10,
-).to(device)
+# model = MultiTaskSEResEmbeddingNet(
+#     embedding_dim=EMBEDDING_DIM,
+#     num_blocks=10,
+# ).to(device)
+#
+# for m in model.modules():
+#     if isinstance(m, nn.Linear):
+#         nn.init.orthogonal_(m.weight)
+#         if m.bias is not None:
+#             nn.init.constant_(m.bias, 0)
 
-for m in model.modules():
-    if isinstance(m, nn.Linear):
-        nn.init.orthogonal_(m.weight)
-        if m.bias is not None:
-            nn.init.constant_(m.bias, 0)
+model = MultiTaskViT(
+    in_channels=17,
+    embed_dim=256,
+    num_heads=8,
+    depth=6,
+    out_dim=EMBEDDING_DIM,
+).to(device)
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
