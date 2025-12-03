@@ -31,7 +31,7 @@ class MultiTaskViT(nn.Module):
 
         self.classifier_head = nn.Sequential(
             nn.Linear(embed_dim, 64),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Linear(64, 1),
         )
 
