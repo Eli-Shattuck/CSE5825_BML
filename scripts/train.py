@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
+from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
@@ -45,6 +46,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
+GRAD_CLIP = 1.0
 EPOCHS = 50
 MODEL_LR = 1e-4
 LOSS_LR = 5e-2
@@ -56,6 +58,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
+torch.set_float32_matmul_precision("high")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
@@ -107,6 +110,9 @@ train_loader = DataLoader(
         steps_per_epoch=2000,
     ),
     num_workers=4,
+    pin_memory=True,
+    persistent_workers=True,
+    prefetch_factor=2,
 )
 
 VAL_BATCH_SIZE = 512
@@ -149,6 +155,7 @@ model = MultiTaskViT(
     depth=6,
     out_dim=EMBEDDING_DIM,
 ).to(device)
+model = torch.compile(model, mode="reduce-overhead")
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
@@ -161,7 +168,8 @@ loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
 
 optimizer = torch.optim.AdamW(
     [
-        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
+        # {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
+        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 0.1},
         {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )
@@ -182,6 +190,8 @@ checkpoint_manager = CheckpointManager(
     save_interval=5,
 )
 
+scaler = GradScaler()
+
 writer = SummaryWriter(log_dir=LOG_DIR / run_name)
 global_step = 0
 
@@ -196,7 +206,16 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     )
 
     for i, (inputs, targets) in enumerate(pbar):
-        inputs, targets = inputs.to(device), targets.to(device)
+        inputs, targets = (
+            inputs.to(
+                device,
+                non_blocking=True,
+            ),
+            targets.to(
+                device,
+                non_blocking=True,
+            ),
+        )
         # check if the first index of targest is set to 1 (indicating a quiet board)
         is_puzzle_mask = targets[:, 0] == 0
         puzzle_inputs = inputs[is_puzzle_mask]
@@ -212,9 +231,16 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
         loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
         batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce)
-        batch_loss_emd.backward()
+        scaler.scale(batch_loss_emd).backward()
+        # batch_loss_emd.backward()
 
-        optimizer.step()
+        scaler.unscale_(optimizer)
+        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+
+        scaler.step(optimizer)
+        scaler.update()
+
+        # optimizer.step()
         scheduler.step()
 
         total_train_loss += batch_loss_emd.item()
