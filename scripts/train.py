@@ -49,7 +49,7 @@ EPOCHS = 50
 MODEL_LR = 1e-4
 LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
-BATCH_SIZE = 2048
+BATCH_SIZE = 4096
 LAMBDA_BCE = 5.0
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -85,16 +85,28 @@ with open(CHECKPOINT_DIR / "test_indices.txt", "w") as f:
     for p_idx in p_test:
         f.write(f"p,{p_idx}\n")
 
-train_loader = DirectLoader(
+# train_loader = DirectLoader(
+#     dataset,
+#     BalancedBatchSampler(
+#         dataset,
+#         q_train,
+#         p_train,
+#         batch_size=BATCH_SIZE,
+#         steps_per_epoch=2000,
+#     ),
+#     device=device,
+# )
+
+train_loader = DataLoader(
     dataset,
-    BalancedBatchSampler(
+    batch_sampler=BalancedBatchSampler(
         dataset,
         q_train,
         p_train,
         batch_size=BATCH_SIZE,
         steps_per_epoch=2000,
     ),
-    device=device,
+    num_workers=4,
 )
 
 VAL_BATCH_SIZE = 512
