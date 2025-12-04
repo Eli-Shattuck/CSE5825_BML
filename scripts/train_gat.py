@@ -143,7 +143,7 @@ model = MultiTaskGAT(
     out_dim=EMBEDDING_DIM,
 ).to(device)
 model_name = model.__class__.__name__
-model = torch.compile(model, mode="reduce-overhead")
+# model = torch.compile(model, mode="reduce-overhead")
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
