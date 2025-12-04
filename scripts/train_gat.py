@@ -51,6 +51,7 @@ MODEL_LR = 1e-4
 LOSS_LR = 5e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 2048
+ACCUM_STEPS = 4
 LAMBDA_BCE = 5.0
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
@@ -105,7 +106,7 @@ train_loader = DataLoader(
         dataset,
         q_train,
         p_train,
-        batch_size=BATCH_SIZE,
+        batch_size=BATCH_SIZE // ACCUM_STEPS,
         steps_per_epoch=2000,
     ),
     num_workers=4,
@@ -208,7 +209,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         puzzle_inputs = inputs[is_puzzle_mask]
         puzzle_targets = targets[is_puzzle_mask][:, 1:]
 
-        optimizer.zero_grad()
+        # optimizer.zero_grad()
         with torch.autocast(device_type=device.type, dtype=torch.float16):
             embeddings, puzzle_logits = model(inputs)
             if puzzle_inputs.size(0) == 0:
@@ -222,14 +223,24 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         scaler.scale(batch_loss_emd).backward()
         # batch_loss_emd.backward()
 
-        scaler.unscale_(optimizer)
-        nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+        if (i + 1) % ACCUM_STEPS == 0:
+            scaler.unscale_(optimizer)
+            nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
 
-        scaler.step(optimizer)
-        scaler.update()
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
+            scheduler.step()
 
-        # optimizer.step()
-        scheduler.step()
+            global_step += 1
+        # scaler.unscale_(optimizer)
+        # nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+        #
+        # scaler.step(optimizer)
+        # scaler.update()
+        #
+        # # optimizer.step()
+        # scheduler.step()
 
         total_train_loss += batch_loss_emd.item()
 
@@ -250,8 +261,6 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             with torch.no_grad():
                 proxy_norm = torch.norm(loss_fn_emb.proxies, dim=1).mean()
                 writer.add_scalar("Debug/Proxy_Norms", proxy_norm, global_step)
-
-        global_step += 1
 
     avg_train_loss = total_train_loss / len(train_loader)
 
