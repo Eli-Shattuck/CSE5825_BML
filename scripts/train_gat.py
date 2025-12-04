@@ -190,9 +190,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     total_train_loss = 0.0
     total_binary_acc = 0.0
 
-    pbar = tqdm(
-        train_loader, total=len(train_loader) * ACCUM_STEPS, desc="Training Batches"
-    )
+    pbar = tqdm(train_loader, total=len(train_loader), desc="Training Batches")
 
     for i, (inputs, targets) in enumerate(pbar):
         inputs, targets = (
