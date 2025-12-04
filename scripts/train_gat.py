@@ -183,6 +183,7 @@ scaler = GradScaler()
 writer = SummaryWriter(log_dir=LOG_DIR / run_name)
 global_step = 0
 
+optimizer.zero_grad(set_to_none=True)
 for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     model.train()
     loss_fn_emb.train()
@@ -190,7 +191,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     total_binary_acc = 0.0
 
     pbar = tqdm(
-        train_loader, total=len(train_loader), desc="Training Batches", leave=False
+        train_loader, total=len(train_loader) * ACCUM_STEPS, desc="Training Batches"
     )
 
     for i, (inputs, targets) in enumerate(pbar):
@@ -229,6 +230,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
             scaler.step(optimizer)
             scaler.update()
+
             optimizer.zero_grad(set_to_none=True)
             scheduler.step()
 
