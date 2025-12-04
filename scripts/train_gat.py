@@ -107,7 +107,7 @@ train_loader = DataLoader(
         q_train,
         p_train,
         batch_size=BATCH_SIZE // ACCUM_STEPS,
-        steps_per_epoch=2000,
+        steps_per_epoch=2000 * ACCUM_STEPS,
     ),
     num_workers=4,
     pin_memory=True,
@@ -165,7 +165,7 @@ optimizer = torch.optim.AdamW(
 scheduler = optim.lr_scheduler.OneCycleLR(
     optimizer,
     max_lr=[MODEL_LR, LOSS_LR],
-    steps_per_epoch=len(train_loader),
+    steps_per_epoch=len(train_loader) // ACCUM_STEPS,
     epochs=EPOCHS,
     pct_start=0.1,
 )
@@ -220,9 +220,8 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
                 loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
 
         loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
-        batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce)
+        batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce) / ACCUM_STEPS
         scaler.scale(batch_loss_emd).backward()
-        # batch_loss_emd.backward()
 
         if (i + 1) % ACCUM_STEPS == 0:
             scaler.unscale_(optimizer)
@@ -235,14 +234,6 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
             scheduler.step()
 
             global_step += 1
-        # scaler.unscale_(optimizer)
-        # nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
-        #
-        # scaler.step(optimizer)
-        # scaler.update()
-        #
-        # # optimizer.step()
-        # scheduler.step()
 
         total_train_loss += batch_loss_emd.item()
 
