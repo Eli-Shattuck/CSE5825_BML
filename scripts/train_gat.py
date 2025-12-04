@@ -209,7 +209,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         puzzle_targets = targets[is_puzzle_mask][:, 1:]
 
         optimizer.zero_grad()
-        with torch.cuda.amp.autocast():
+        with torch.autocast(device_type=device.type, dtype=torch.float16):
             embeddings, puzzle_logits = model(inputs)
             if puzzle_inputs.size(0) == 0:
                 loss_emd = torch.tensor(0.0, device=device)
@@ -217,10 +217,8 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
                 puzzle_embeddings = embeddings[is_puzzle_mask]
                 loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
 
-            loss_bce = loss_fn_binary(
-                puzzle_logits, is_puzzle_mask.float().unsqueeze(1)
-            )
-            batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce)
+        loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
+        batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce)
         scaler.scale(batch_loss_emd).backward()
         # batch_loss_emd.backward()
 
