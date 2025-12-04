@@ -9,4 +9,4 @@
 
 SCRIPT=$1
 
-python "$SCRIPT"
+nixGL python "$SCRIPT"

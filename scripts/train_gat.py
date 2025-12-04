@@ -13,8 +13,7 @@ from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
-from beschess.components.net.resnet import MultiTaskSEResEmbeddingNet
-from beschess.components.net.vit import MultiTaskViT
+from beschess.components.net.gnn import MultiTaskGAT
 from beschess.components.utils import (
     CheckpointManager,
     compute_proxy_hitrate,
@@ -100,6 +99,21 @@ train_loader = DirectLoader(
     device=device,
 )
 
+# train_loader = DataLoader(
+#     dataset,
+#     batch_sampler=BalancedBatchSampler(
+#         dataset,
+#         q_train,
+#         p_train,
+#         batch_size=BATCH_SIZE,
+#         steps_per_epoch=2000,
+#     ),
+#     num_workers=4,
+#     pin_memory=True,
+#     persistent_workers=True,
+#     prefetch_factor=2,
+# )
+
 VAL_BATCH_SIZE = 512
 VAL_STEPS = (len(q_val) + len(p_val)) // VAL_BATCH_SIZE + 1
 val_loader = DataLoader(
@@ -122,16 +136,14 @@ val_puzzle_loader = DataLoader(
     num_workers=4,
 )
 
-model = MultiTaskSEResEmbeddingNet(
-    embedding_dim=EMBEDDING_DIM,
-    num_blocks=10,
+model = MultiTaskGAT(
+    in_channels=17,
+    depth=4,
+    hidden_dim=256,
+    out_dim=EMBEDDING_DIM,
 ).to(device)
-
-for m in model.modules():
-    if isinstance(m, nn.Linear):
-        nn.init.orthogonal_(m.weight)
-        if m.bias is not None:
-            nn.init.constant_(m.bias, 0)
+model_name = model.__class__.__name__
+model = torch.compile(model, mode="reduce-overhead")
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
@@ -157,7 +169,7 @@ scheduler = optim.lr_scheduler.OneCycleLR(
     pct_start=0.1,
 )
 
-run_name = f"{model.__class__.__name__}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+run_name = f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 (CHECKPOINT_DIR / run_name).mkdir(parents=True, exist_ok=True)
 checkpoint_manager = CheckpointManager(
     CHECKPOINT_DIR / run_name,

@@ -35,6 +35,17 @@ TAG_NAMES = [
 ]
 
 
+def clean_state_dict(state_dict):
+    """
+    Removes '_orig_mod.' prefixes from state dict keys.
+    """
+    cleaned_dict = {}
+    for key, value in state_dict.items():
+        new_key = key.replace("_orig_mod.", "")
+        cleaned_dict[new_key] = value
+    return cleaned_dict
+
+
 class CheckpointManager:
     def __init__(
         self,
@@ -101,7 +112,7 @@ class CheckpointManager:
         file_name: str,
     ):
         checkpoint = {
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": clean_state_dict(model.state_dict()),
             "loss_fn_state_dict": loss_fn.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),

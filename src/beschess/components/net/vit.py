@@ -5,7 +5,12 @@ import torch.nn.functional as F
 
 class MultiTaskViT(nn.Module):
     def __init__(
-        self, in_channels=17, embed_dim=256, num_heads=8, depth=6, out_dim=128
+        self,
+        in_channels: int = 17,
+        embed_dim: int = 256,
+        num_heads: int = 8,
+        depth: int = 6,
+        out_dim: int = 128,
     ):
         super().__init__()
 

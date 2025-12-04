@@ -13,7 +13,6 @@ from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
-from beschess.components.net.resnet import MultiTaskSEResEmbeddingNet
 from beschess.components.net.vit import MultiTaskViT
 from beschess.components.utils import (
     CheckpointManager,
@@ -88,16 +87,31 @@ with open(CHECKPOINT_DIR / "test_indices.txt", "w") as f:
     for p_idx in p_test:
         f.write(f"p,{p_idx}\n")
 
-train_loader = DirectLoader(
+# train_loader = DirectLoader(
+#     dataset,
+#     BalancedBatchSampler(
+#         dataset,
+#         q_train,
+#         p_train,
+#         batch_size=BATCH_SIZE,
+#         steps_per_epoch=2000,
+#     ),
+#     device=device,
+# )
+
+train_loader = DataLoader(
     dataset,
-    BalancedBatchSampler(
+    batch_sampler=BalancedBatchSampler(
         dataset,
         q_train,
         p_train,
         batch_size=BATCH_SIZE,
         steps_per_epoch=2000,
     ),
-    device=device,
+    num_workers=4,
+    pin_memory=True,
+    persistent_workers=True,
+    prefetch_factor=2,
 )
 
 VAL_BATCH_SIZE = 512
@@ -122,16 +136,15 @@ val_puzzle_loader = DataLoader(
     num_workers=4,
 )
 
-model = MultiTaskSEResEmbeddingNet(
-    embedding_dim=EMBEDDING_DIM,
-    num_blocks=10,
-).to(device)
 
-for m in model.modules():
-    if isinstance(m, nn.Linear):
-        nn.init.orthogonal_(m.weight)
-        if m.bias is not None:
-            nn.init.constant_(m.bias, 0)
+model = MultiTaskViT(
+    in_channels=17,
+    embed_dim=256,
+    num_heads=8,
+    depth=6,
+    out_dim=EMBEDDING_DIM,
+).to(device)
+model = torch.compile(model, mode="reduce-overhead")
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
@@ -144,7 +157,8 @@ loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
 
 optimizer = torch.optim.AdamW(
     [
-        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
+        # Vit
+        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 0.1},
         {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )

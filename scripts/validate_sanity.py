@@ -5,18 +5,21 @@ import torch
 from sklearn.neighbors import NearestNeighbors
 
 from beschess.components.net.resnet import MultiTaskSEResEmbeddingNet
+from beschess.components.net.vit import MultiTaskViT
 from beschess.data.embedding import PuzzleDataset
+from beschess.utils import clean_state_dict
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TEST_INDICES_FILE = DATA_DIR / "test_indices.txt"
 
-CHECKPOINT = (
-    CHECKPOINT_DIR
-    / "MultiTaskSEResEmbeddingNet_20251127_030440"
-    / "best_checkpoint.pth"
-)
+CHECKPOINT = CHECKPOINT_DIR / "OptimizedModule_20251203_151336" / "best_checkpoint.pth"
+# CHECKPOINT = (
+#     CHECKPOINT_DIR
+#     / "MultiTaskSEResEmbeddingNet_20251127_030440"
+#     / "best_checkpoint.pth"
+# )
 
 N_PUZZLES = 8000
 N_QUIET = 8000
@@ -151,7 +154,14 @@ def verify():
     )
 
     print(f"Loading checkpoint: {CHECKPOINT.name}...")
-    model = MultiTaskSEResEmbeddingNet(embedding_dim=128, num_blocks=10).to(DEVICE)
+    # model = MultiTaskSEResEmbeddingNet(embedding_dim=128, num_blocks=10).to(DEVICE)
+    model = MultiTaskViT(
+        in_channels=17,
+        embed_dim=256,
+        num_heads=8,
+        depth=6,
+        out_dim=128,
+    ).to(DEVICE)
 
     checkpoint = torch.load(CHECKPOINT, map_location=DEVICE)
     state_dict = (
@@ -159,6 +169,7 @@ def verify():
         if "model_state_dict" in checkpoint
         else checkpoint
     )
+    state_dict = clean_state_dict(state_dict)
     model.load_state_dict(state_dict)
     model.eval()
 

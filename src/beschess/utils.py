@@ -145,3 +145,14 @@ def tensor_to_board(tensor):
         board.ep_square = None
 
     return board
+
+
+def clean_state_dict(state_dict):
+    """
+    Removes '_orig_mod.' prefixes from state dict keys.
+    """
+    cleaned_dict = {}
+    for key, value in state_dict.items():
+        new_key = key.replace("_orig_mod.", "")
+        cleaned_dict[new_key] = value
+    return cleaned_dict
