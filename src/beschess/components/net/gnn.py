@@ -66,7 +66,7 @@ class MultiTaskGAT(nn.Module):
             (1, 1),
         ]
 
-        adj = torch.zeros(64, 64)
+        adj = torch.zeros(64, 64, dtype=torch.bool)
         for sq in range(64):
             rank, file = divmod(sq, 8)
             adj[sq, sq] = 1  # Self-loop
@@ -75,7 +75,7 @@ class MultiTaskGAT(nn.Module):
                 r, f = rank + dr, file + df
                 if 0 <= r < 8 and 0 <= f < 8:
                     target_sq = r * 8 + f
-                    adj[sq, target_sq] = 1
+                    adj[sq, target_sq] = True
             # Queen moves
             for dr, df in queen_directions:
                 r, f = rank, file
@@ -84,7 +84,7 @@ class MultiTaskGAT(nn.Module):
                     f += df
                     if 0 <= r < 8 and 0 <= f < 8:
                         target_sq = r * 8 + f
-                        adj[sq, target_sq] = 1
+                        adj[sq, target_sq] = True
                     else:
                         break
 

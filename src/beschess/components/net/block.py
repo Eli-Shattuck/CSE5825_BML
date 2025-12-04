@@ -29,7 +29,7 @@ class GATLayer(nn.Module):
         adj_matrix: torch.Tensor,
     ):
         super().__init__()
-        self.adj = adj_matrix  # shape (64, 64)
+        self.register_buffer("adj", adj_matrix)
         self.W = nn.Linear(in_dim, out_dim, bias=False)
         self.a = nn.Linear(2 * out_dim, 1, bias=False)
         self.leakyrelu = nn.LeakyReLU(0.2)
