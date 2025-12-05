@@ -26,9 +26,9 @@ class MultiTaskGAT(nn.Module):
         self.input_proj = nn.Linear(in_channels, hidden_dim)
 
         # GAT Layers
-        self.encoder = nn.Sequential(
-            *[
-                copy.deepcopy(GATLayer(hidden_dim, hidden_dim, self.adj))
+        self.encoder = nn.ModuleList(
+            [
+                copy.deepcopy(GATLayer(hidden_dim, hidden_dim, self.adj, num_heads=8))
                 for _ in range(depth)
             ]
         )
@@ -66,7 +66,7 @@ class MultiTaskGAT(nn.Module):
             (1, 1),
         ]
 
-        adj = torch.zeros(64, 64, dtype=torch.bool)
+        adj = torch.zeros(64, 64)
         for sq in range(64):
             rank, file = divmod(sq, 8)
             adj[sq, sq] = 1  # Self-loop
@@ -75,7 +75,7 @@ class MultiTaskGAT(nn.Module):
                 r, f = rank + dr, file + df
                 if 0 <= r < 8 and 0 <= f < 8:
                     target_sq = r * 8 + f
-                    adj[sq, target_sq] = True
+                    adj[sq, target_sq] = 1.0
             # Queen moves
             for dr, df in queen_directions:
                 r, f = rank, file
@@ -84,7 +84,7 @@ class MultiTaskGAT(nn.Module):
                     f += df
                     if 0 <= r < 8 and 0 <= f < 8:
                         target_sq = r * 8 + f
-                        adj[sq, target_sq] = True
+                        adj[sq, target_sq] = 1.0
                     else:
                         break
 
@@ -95,8 +95,8 @@ class MultiTaskGAT(nn.Module):
 
         x = self.input_proj(x)
 
-        for i in range(len(self.encoder)):
-            x = x + self.encoder[i](x)
+        for gat_layer in self.encoder:
+            x = x + gat_layer(x)
 
         # Global Readout: Max Pooling works best for Tactics (finding the "sharpest" square)
         # Mean Pooling works best for Positional evaluation

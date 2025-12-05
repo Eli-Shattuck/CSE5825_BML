@@ -48,7 +48,7 @@ torch.manual_seed(SEED)
 GRAD_CLIP = 1.0
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 5e-2
+LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 2048
 ACCUM_STEPS = 4
@@ -218,7 +218,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
                 loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
 
         loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
-        batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce) / ACCUM_STEPS
+        batch_loss_emd = (loss_emd + (LAMBDA_BCE * loss_bce)) / ACCUM_STEPS
         scaler.scale(batch_loss_emd).backward()
 
         if (i + 1) % ACCUM_STEPS == 0:
