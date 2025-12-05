@@ -129,6 +129,6 @@ class MultiTaskViT2D(nn.Module):
         embeddings = self.metric_head(global_feat)
         embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
 
-        puzzle_logits = self.classifier_head(embeddings)
+        puzzle_logits = self.classifier_head(global_feat)
 
         return embeddings, puzzle_logits
