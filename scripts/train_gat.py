@@ -218,8 +218,8 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
                 loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
 
         loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
-        batch_loss_emd = (loss_emd + (LAMBDA_BCE * loss_bce)) / ACCUM_STEPS
-        scaler.scale(batch_loss_emd).backward()
+        batch_loss_emd = loss_emd + (LAMBDA_BCE * loss_bce)
+        scaler.scale(batch_loss_emd / ACCUM_STEPS).backward()
 
         if (i + 1) % ACCUM_STEPS == 0:
             scaler.unscale_(optimizer)

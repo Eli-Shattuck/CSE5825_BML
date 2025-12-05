@@ -96,7 +96,7 @@ class MultiTaskGAT(nn.Module):
         x = self.input_proj(x)
 
         for gat_layer in self.encoder:
-            x = x + gat_layer(x)
+            x = F.elu(x + gat_layer(x))
 
         # Global Readout: Max Pooling works best for Tactics (finding the "sharpest" square)
         # Mean Pooling works best for Positional evaluation
