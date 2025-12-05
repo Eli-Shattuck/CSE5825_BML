@@ -13,7 +13,7 @@ from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 
 from beschess.components.loss import ProxyAnchor
-from beschess.components.net.vit import MultiTaskViT
+from beschess.components.net.vit import MultiTaskViT, MultiTaskViT2D
 from beschess.components.utils import (
     CheckpointManager,
     compute_proxy_hitrate,
@@ -137,7 +137,7 @@ val_puzzle_loader = DataLoader(
 )
 
 
-model = MultiTaskViT(
+model = MultiTaskViT2D(
     in_channels=17,
     embed_dim=256,
     num_heads=8,
