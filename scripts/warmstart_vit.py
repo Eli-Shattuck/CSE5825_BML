@@ -69,8 +69,8 @@ WARMUP_LR = 1e-3
 
 # Stage 2: Fine-Tuning (Slow, low LR, Backbone Unfrozen)
 FINETUNE_EPOCHS = 10
-FINETUNE_LR_BACKBONE = 1e-5  # Low to preserve "Chess Grammar"
-FINETUNE_LR_HEADS = 1e-4
+FINETUNE_LR_BACKBONE = 1e-4  # Low to preserve "Chess Grammar"
+FINETUNE_LR_HEADS = 1e-3
 
 # ==========================================
 # SETUP
@@ -232,11 +232,68 @@ val_loader = DataLoader(
 global_step = 0
 
 
+# def run_epoch(optimizer, scheduler=None, desc="Training"):
+#     global global_step
+#     model.train()
+#     loss_fn_emb.train()
+#     total_loss = 0.0
+#
+#     pbar = tqdm(train_loader, desc=desc, leave=False)
+#
+#     for inputs, targets in pbar:
+#         inputs = inputs.to(device, non_blocking=True)
+#         targets = targets.to(device, non_blocking=True)
+#
+#         # Identify Puzzles vs Negatives
+#         is_puzzle_mask = targets[:, 0] == 0
+#         puzzle_inputs = inputs[is_puzzle_mask]
+#         puzzle_targets = targets[is_puzzle_mask][:, 1:]
+#
+#         optimizer.zero_grad()
+#
+#         # Forward
+#         embeddings, puzzle_logits = model(inputs)
+#
+#         # 1. Metric Loss (Only on actual puzzles)
+#         if puzzle_inputs.size(0) > 0:
+#             puzzle_embeddings = embeddings[is_puzzle_mask]
+#             loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
+#         else:
+#             loss_emd = torch.tensor(0.0, device=device)
+#
+#         # 2. Binary Loss (On Puzzles vs [Quiet + Hard Negatives])
+#         loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
+#
+#         # Combine
+#         total = loss_emd + (LAMBDA_BCE * loss_bce)
+#
+#         # Backward
+#         scaler.scale(total).backward()
+#         scaler.unscale_(optimizer)
+#         nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+#         scaler.step(optimizer)
+#         scaler.update()
+#
+#         if scheduler:
+#             scheduler.step()
+#
+#         total_loss += total.item()
+#
+#         # Logging
+#         if global_step % 50 == 0:
+#             writer.add_scalar("Train/Loss_Total", total.item(), global_step)
+#             writer.add_scalar("Train/Loss_Proxy", loss_emd.item(), global_step)
+#             writer.add_scalar("Train/Loss_Binary", loss_bce.item(), global_step)
+#         global_step += 1
+#
+#     return total_loss / len(train_loader)
 def run_epoch(optimizer, scheduler=None, desc="Training"):
     global global_step
     model.train()
     loss_fn_emb.train()
+
     total_loss = 0.0
+    total_binary_acc = 0.0  # <--- NEW: Track accumulator
 
     pbar = tqdm(train_loader, desc=desc, leave=False)
 
@@ -254,15 +311,17 @@ def run_epoch(optimizer, scheduler=None, desc="Training"):
         # Forward
         embeddings, puzzle_logits = model(inputs)
 
-        # 1. Metric Loss (Only on actual puzzles)
+        # 1. Metric Loss
         if puzzle_inputs.size(0) > 0:
             puzzle_embeddings = embeddings[is_puzzle_mask]
             loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
         else:
             loss_emd = torch.tensor(0.0, device=device)
 
-        # 2. Binary Loss (On Puzzles vs [Quiet + Hard Negatives])
-        loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
+        # 2. Binary Loss
+        # Ensure target shape matches logits (B, 1)
+        binary_targets = is_puzzle_mask.float().unsqueeze(1)
+        loss_bce = loss_fn_binary(puzzle_logits, binary_targets)
 
         # Combine
         total = loss_emd + (LAMBDA_BCE * loss_bce)
@@ -277,6 +336,17 @@ def run_epoch(optimizer, scheduler=None, desc="Training"):
         if scheduler:
             scheduler.step()
 
+        # --- NEW: CALCULATE ACCURACY ---
+        # 1. Sigmoid to get probability (0.0 to 1.0)
+        # 2. > 0.5 to get class (True/False)
+        # 3. Float to get (1.0/0.0)
+        preds = (torch.sigmoid(puzzle_logits) > 0.5).float()
+
+        # Compare prediction to target
+        batch_acc = (preds == binary_targets).float().mean()
+        total_binary_acc += batch_acc.item()
+        # -------------------------------
+
         total_loss += total.item()
 
         # Logging
@@ -284,9 +354,28 @@ def run_epoch(optimizer, scheduler=None, desc="Training"):
             writer.add_scalar("Train/Loss_Total", total.item(), global_step)
             writer.add_scalar("Train/Loss_Proxy", loss_emd.item(), global_step)
             writer.add_scalar("Train/Loss_Binary", loss_bce.item(), global_step)
+
+            # <--- NEW: Log Accuracy
+            writer.add_scalar("Train/Binary_Acc", batch_acc.item(), global_step)
+
+            # Optional: Log current LR
+            if scheduler:
+                writer.add_scalar("Train/LR", scheduler.get_last_lr()[0], global_step)
+
         global_step += 1
 
-    return total_loss / len(train_loader)
+        # Update progress bar text
+        pbar.set_postfix(
+            {"Loss": f"{total.item():.4f}", "Acc": f"{batch_acc.item():.4f}"}
+        )
+
+    avg_loss = total_loss / len(train_loader)
+    avg_acc = total_binary_acc / len(train_loader)
+
+    # Print epoch summary
+    print(f"{desc} - Avg Loss: {avg_loss:.4f} | Avg Binary Acc: {avg_acc:.4f}")
+
+    return avg_loss
 
 
 # ==========================================
