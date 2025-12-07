@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -40,7 +41,7 @@ class MultiTaskViT(nn.Module):
         )
 
         self.metric_head = nn.Sequential(
-            nn.Linear(embed_dim, out_dim),
+            nn.Linear(embed_dim, out_dim, bias=False),
         )
 
         self.classifier_head = nn.Sequential(
@@ -104,7 +105,7 @@ class MultiTaskViT2D(nn.Module):
         self.norm = nn.LayerNorm(embed_dim)
 
         self.metric_head = nn.Sequential(
-            nn.Linear(embed_dim, out_dim),
+            nn.Linear(embed_dim, out_dim, bias=False),
         )
 
         self.classifier_head = nn.Sequential(
@@ -198,3 +199,84 @@ def extract_attention_weights(model, x):
         all_layer_weights = all_layer_weights.permute(1, 0, 2, 3, 4)
 
         return embeddings, puzzle_probs, all_layer_weights
+
+
+def compute_attention_rollout(attention_weights):
+    batch_size, num_layers, num_heads, seq_len, _ = attention_weights.shape
+
+    device = attention_weights.device
+
+    avg_attention = attention_weights.mean(dim=2)
+
+    residual = torch.eye(seq_len, seq_len, device=device).unsqueeze(0).unsqueeze(0)
+    augmented_attention = avg_attention + residual
+
+    augmented_attention = augmented_attention / augmented_attention.sum(
+        dim=-1, keepdim=True
+    )
+
+    joint_attention = augmented_attention[:, 0]
+
+    for n in range(1, num_layers):
+        joint_attention = torch.bmm(augmented_attention[:, n], joint_attention)
+
+    return joint_attention
+
+
+def compute_head_importance(model, x):
+    for param in model.parameters():
+        param.requires_grad = True
+
+    model.eval()
+    model.zero_grad()
+
+    embeddings, _ = model(x)
+
+    loss = embeddings.norm()
+    loss.backward()
+
+    head_scores = []
+
+    for layer_idx, layer in enumerate(model.encoder.layers):
+        attn = layer.last_attn_weights
+
+        if attn.grad is not None:
+            score = (attn * attn.grad).abs().sum(dim=(0, 2, 3))
+
+            for head_idx, val in enumerate(score):
+                head_scores.append((head_idx, layer_idx, val.item()))
+        else:
+            print(f"Warning: No gradients found for Layer {layer_idx}.")
+
+    return sorted(head_scores, key=lambda x: x[2], reverse=True)
+
+
+def compute_faithfulness_map(model, board_tensor):
+    """
+    Computes a 64-element array where each value is the 'Impact Score'
+    of that square (how much the embedding shifts when the square is removed).
+    """
+    model.eval()
+    device = next(model.parameters()).device
+    board_tensor = board_tensor.to(device)
+
+    with torch.no_grad():
+        base_emb, _ = model(board_tensor)
+
+    impact_scores = np.zeros(64)
+
+    for i in range(64):
+        occluded_board = board_tensor.clone()
+
+        occluded_flat = occluded_board.flatten(start_dim=2)
+        occluded_flat[:, :, i] = 0  # Zero out all channels for this square
+
+        occluded_board = occluded_flat.view_as(board_tensor)
+
+        with torch.no_grad():
+            new_emb, _ = model(occluded_board)
+
+        dist = torch.norm(base_emb - new_emb).item()
+        impact_scores[i] = dist
+
+    return impact_scores

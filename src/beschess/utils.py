@@ -108,7 +108,6 @@ def packed_to_tensor(packed_array: np.ndarray) -> np.ndarray:
 
 def tensor_to_board(tensor: np.ndarray) -> chess.Board:
     """Reconstructs a chess.Board from the (17, 8, 8) tensor representation"""
-    print(tensor.shape)
     board = chess.Board(None)
     board.clear()
     board.turn = chess.WHITE
@@ -156,47 +155,6 @@ def tensor_to_board(tensor: np.ndarray) -> chess.Board:
         board.ep_square = None
 
     return board
-
-
-# def tensor_to_board(tensor):
-#     """Reconstructs a chess.Board from the (17, 8, 8) tensor representation"""
-#
-#     board = chess.Board(None)
-#     board.clear()
-#
-#     for piece_index in range(12):
-#         positions = np.argwhere(tensor[piece_index] == 1)
-#         for pos in positions.T:
-#             row, col = pos
-#             sq = row * 8 + col
-#             if piece_index < 6:
-#                 piece = chess.Piece(piece_index + 1, chess.WHITE)
-#             else:
-#                 piece = chess.Piece(piece_index - 5, chess.BLACK)
-#             board.set_piece_at(sq, piece)
-#
-#     castling_rights = chess.BB_EMPTY
-#
-#     if (tensor[12] == 1).any():
-#         castling_rights |= chess.BB_H1  # White King-side
-#     if (tensor[13] == 1).any():
-#         castling_rights |= chess.BB_A1  # White Queen-side
-#     if (tensor[14] == 1).any():
-#         castling_rights |= chess.BB_H8  # Black King-side
-#     if (tensor[15] == 1).any():
-#         castling_rights |= chess.BB_A8  # Black Queen-side
-#
-#     board.castling_rights = castling_rights
-#
-#     ep_positions = (tensor[16] == 1).nonzero()
-#     if len(ep_positions) > 0:
-#         row, col = ep_positions
-#         ep_sq = row * 8 + col
-#         board.ep_square = ep_sq
-#     else:
-#         board.ep_square = None
-#
-#     return board
 
 
 def clean_state_dict(state_dict):

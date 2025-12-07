@@ -40,6 +40,7 @@ N_QUIET = 16000
 BATCH_SIZE = 64
 
 TAG_NAMES = [
+    "Quiet",
     "MatingNet",
     "SpecialMove",
     "Promotion",

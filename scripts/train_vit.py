@@ -19,6 +19,7 @@ from beschess.components.utils import (
     compute_proxy_hitrate,
     compute_proxy_map,
     compute_tsne_embeddings,
+    compute_binary_accuracy,
     evaluate_proxy_cos,
     plot_tsne_embeddings,
 )
@@ -30,14 +31,14 @@ from beschess.data.embedding import (
 )
 
 TAG_NAMES = [
-    "LinearAttack",
-    "DoubleAttack",
+    "Quiet",
     "MatingNet",
-    "Overload",
-    "Displacement",
-    "Sacrifice",
-    "EndgameTactic",
-    "PieceEndgame",
+    "SpecialMove",
+    "Promotion",
+    "DoubleAttack",
+    "LinearAttack",
+    "Punishment",
+    "ForcingMove",
 ]
 
 SEED = 42
@@ -62,15 +63,43 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 quiet_boards_file = DATA_DIR / "quiet_boards_preeval.npy"
+hard_negatives_file = DATA_DIR / "hard_negatives.npy"
 puzzle_boards_file = DATA_DIR / "boards_packed.npy"
 puzzle_labels_file = DATA_DIR / "tags_packed.npy"
 
-quiet_boards = np.load(quiet_boards_file, mmap_mode="r")
-puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")
-puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")
+quiet_boards = np.load(quiet_boards_file)
+puzzle_boards = np.load(puzzle_boards_file)
+puzzle_labels = np.load(puzzle_labels_file)
+
+try:
+    hard_negatives = np.load(hard_negatives_file)
+    print(f"Found {len(hard_negatives)} Hard Negatives.")
+
+    # --- BALANCING STRATEGY ---
+    # We want roughly 50% Quiet / 50% Hard Negatives in the "Non-Puzzle" pool.
+    # We downsample the larger set to match the smaller set.
+    n_hard = len(hard_negatives)
+    n_quiet = len(quiet_boards)
+
+    if n_quiet > n_hard:
+        print(
+            f"Balancing: Downsampling Quiet Boards ({n_quiet}) to match Hard Negatives ({n_hard})..."
+        )
+        indices = np.random.choice(n_quiet, n_hard, replace=False)
+        quiet_subset = quiet_boards[indices]
+        negatives_combined = np.concatenate([quiet_subset, hard_negatives], axis=0)
+    else:
+        print(
+            f"Balancing: Using all available boards (Quiet: {n_quiet}, Hard: {n_hard})."
+        )
+        negatives_combined = np.concatenate([quiet_boards, hard_negatives], axis=0)
+
+except FileNotFoundError:
+    print("WARNING: hard_negatives.npy not found! Training on quiet boards only.")
+    negatives_combined = quiet_boards
 
 dataset = PuzzleDataset(
-    quiet_boards=quiet_boards,
+    quiet_boards=negatives_combined,
     puzzle_boards=puzzle_boards,
     puzzle_labels=puzzle_labels,
 )
@@ -144,7 +173,8 @@ model = MultiTaskViT(
     depth=6,
     out_dim=EMBEDDING_DIM,
 ).to(device)
-model = torch.compile(model, mode="reduce-overhead")
+# model = torch.compile(model, mode="reduce-overhead")
+model = torch.compile(model, mode="max-autotune")
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
@@ -274,11 +304,14 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
     val_map = compute_proxy_map(top_indices, val_labels, k_list)
 
+    val_binary_acc = compute_binary_accuracy(model, val_loader, device)
+
     metrics = {
         "val_map@1": val_map[1],
         "val_map@3": val_map[3],
         "val_hitrate@1": hitrate[1],
         "val_hitrate@3": hitrate[3],
+        "val_binary_acc": val_binary_acc,
         "train_loss": avg_train_loss,
     }
 
@@ -286,6 +319,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
     writer.add_scalar("Val/HitRate@3", hitrate[3], global_step)
+    writer.add_scalar("Val/Binary_Acc", val_binary_acc, global_step)
 
     checkpoint_manager.check(
         model,
@@ -321,6 +355,7 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         f"Train Loss: {avg_train_loss:.4f} | "
         f"MAP@3: {val_map[3]:.4f} | "
         f"HR@1: {hitrate[1]:.4f} | "
+        f"Val Binary Acc: {val_binary_acc:.4f}"
     )
 
 writer.close()
