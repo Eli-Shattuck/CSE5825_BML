@@ -22,6 +22,7 @@ from beschess.components.utils import (
     compute_proxy_hitrate,
     compute_proxy_map,
     compute_tsne_embeddings,
+    compute_binary_accuracy,
     evaluate_proxy_cos,
     plot_tsne_embeddings,
 )
@@ -232,61 +233,6 @@ val_loader = DataLoader(
 global_step = 0
 
 
-# def run_epoch(optimizer, scheduler=None, desc="Training"):
-#     global global_step
-#     model.train()
-#     loss_fn_emb.train()
-#     total_loss = 0.0
-#
-#     pbar = tqdm(train_loader, desc=desc, leave=False)
-#
-#     for inputs, targets in pbar:
-#         inputs = inputs.to(device, non_blocking=True)
-#         targets = targets.to(device, non_blocking=True)
-#
-#         # Identify Puzzles vs Negatives
-#         is_puzzle_mask = targets[:, 0] == 0
-#         puzzle_inputs = inputs[is_puzzle_mask]
-#         puzzle_targets = targets[is_puzzle_mask][:, 1:]
-#
-#         optimizer.zero_grad()
-#
-#         # Forward
-#         embeddings, puzzle_logits = model(inputs)
-#
-#         # 1. Metric Loss (Only on actual puzzles)
-#         if puzzle_inputs.size(0) > 0:
-#             puzzle_embeddings = embeddings[is_puzzle_mask]
-#             loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_targets)
-#         else:
-#             loss_emd = torch.tensor(0.0, device=device)
-#
-#         # 2. Binary Loss (On Puzzles vs [Quiet + Hard Negatives])
-#         loss_bce = loss_fn_binary(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
-#
-#         # Combine
-#         total = loss_emd + (LAMBDA_BCE * loss_bce)
-#
-#         # Backward
-#         scaler.scale(total).backward()
-#         scaler.unscale_(optimizer)
-#         nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
-#         scaler.step(optimizer)
-#         scaler.update()
-#
-#         if scheduler:
-#             scheduler.step()
-#
-#         total_loss += total.item()
-#
-#         # Logging
-#         if global_step % 50 == 0:
-#             writer.add_scalar("Train/Loss_Total", total.item(), global_step)
-#             writer.add_scalar("Train/Loss_Proxy", loss_emd.item(), global_step)
-#             writer.add_scalar("Train/Loss_Binary", loss_bce.item(), global_step)
-#         global_step += 1
-#
-#     return total_loss / len(train_loader)
 def run_epoch(optimizer, scheduler=None, desc="Training"):
     global global_step
     model.train()
@@ -460,6 +406,7 @@ for epoch in range(FINETUNE_EPOCHS):
     k_list = [1, 3]
     val_map = compute_proxy_map(top_indices, val_labels, k_list)
     hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
+    val_binary_acc = compute_binary_accuracy(model, val_loader, device)
 
     print(
         f"Epoch {epoch + 1} | Loss: {train_loss:.4f} | MAP@3: {val_map[3]:.4f} | HR@1: {hitrate[1]:.4f}"
@@ -467,8 +414,10 @@ for epoch in range(FINETUNE_EPOCHS):
 
     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
+    writer.add_scalar("Val/Binary_Acc", val_binary_acc, global_step)
 
     metrics = {
+        "binary_acc": val_binary_acc,
         "val_map@3": val_map[3],
         "val_hitrate@1": hitrate[1],
         "train_loss": train_loss,

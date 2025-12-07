@@ -782,25 +782,30 @@ def compute_quiet_margin(
     return avg_margin, accuracy
 
 
-def extract_attention_weights(model, x):
+def compute_binary_accuracy(
+    model: nn.Module, loader: DataLoader, device: torch.Device
+) -> float:
     """
-    Runs inference and returns the attention weights from the encoder.
-
-    Args:
-        model: Your MultiTaskViT instance
-        x: Input tensor (Batch, Seq_Len, Dim)
-
-    Returns:
-        attn_tensor: (Layers, Batch, Heads, Seq_Len, Seq_Len)
+    Calculates Binary Accuracy (Puzzle vs Non-Puzzle)
     """
     model.eval()
+    total_acc = 0.0
+    num_batches = 0
+
     with torch.no_grad():
-        embeddings, puzzle_logit = model(x)
-        puzzle_probs = torch.sigmoid(puzzle_logit)
+        for inputs, targets in loader:
+            inputs = inputs.to(device, non_blocking=True)
+            targets = targets.to(device, non_blocking=True)
 
-        all_layer_weights = []
+            is_puzzle_mask = targets[:, 0] == 0
+            binary_targets = is_puzzle_mask.float().unsqueeze(1)
 
-        for layer in model.encoder.layers:
-            all_layer_weights.append(layer.last_attn_weights.cpu())
+            _, puzzle_logits = model(inputs)
 
-        return embeddings, puzzle_probs, torch.stack(all_layer_weights)
+            preds = (torch.sigmoid(puzzle_logits) > 0.5).float()
+            acc = (preds == binary_targets).float().mean()
+
+            total_acc += acc.item()
+            num_batches += 1
+
+    return total_acc / num_batches if num_batches > 0 else 0.0
