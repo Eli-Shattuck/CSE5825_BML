@@ -22,8 +22,11 @@ TEST_INDICES_FILE = DATA_DIR / "test_indices.txt"
 USE_VIT = True
 
 if USE_VIT:
+    # CHECKPOINT_PATH = (
+    #     CHECKPOINT_DIR / "OptimizedModule_20251203_151336" / "best_checkpoint.pth"
+    # )
     CHECKPOINT_PATH = (
-        CHECKPOINT_DIR / "OptimizedModule_20251203_151336" / "best_checkpoint.pth"
+        CHECKPOINT_DIR / "FineTune_Stage2_A100_20251206_2238" / "best_checkpoint.pth"
     )
 else:
     CHECKPOINT_PATH = (
@@ -37,15 +40,13 @@ N_QUIET = 16000
 BATCH_SIZE = 64
 
 TAG_NAMES = [
-    "Quiet",
-    "LinearAttack",
-    "DoubleAttack",
     "MatingNet",
-    "Overload",
-    "Displacement",
-    "Sacrifice",
-    "EndgameTactic",
-    "PieceEndgame",
+    "SpecialMove",
+    "Promotion",
+    "DoubleAttack",
+    "LinearAttack",
+    "Punishment",
+    "ForcingMove",
 ]
 
 
@@ -196,11 +197,27 @@ def verify():
     puzzle_tags = np.load(DATA_DIR / "tags_packed.npy", mmap_mode="r")
     quiet_boards = np.load(DATA_DIR / "quiet_boards_preeval.npy", mmap_mode="r")
 
-    dataset = PuzzleDataset(
-        quiet_boards=quiet_boards,
-        puzzle_boards=puzzle_boards,
-        puzzle_labels=puzzle_tags,
-    )
+    try:
+        hard_negatives = np.load(DATA_DIR / "hard_negatives.npy", mmap_mode="r")
+
+        # Balance Negatives
+        n_hard = len(hard_negatives)
+        n_quiet = len(quiet_boards)
+
+        if n_quiet > n_hard:
+            print(
+                f"Downsampling Quiet Boards ({n_quiet}) to match Hard Negatives ({n_hard})..."
+            )
+            indices = np.random.choice(n_quiet, n_hard, replace=False)
+            quiet_subset = quiet_boards[indices]
+            negatives_combined = np.concatenate([quiet_subset, hard_negatives], axis=0)
+        else:
+            negatives_combined = np.concatenate([quiet_boards, hard_negatives], axis=0)
+    except FileNotFoundError:
+        print("WARNING: hard_negatives.npy not found. Using Quiet Boards only.")
+        negatives_combined = quiet_boards
+
+    dataset = PuzzleDataset(negatives_combined, puzzle_boards, puzzle_tags)
 
     # --- 2. MODEL LOADING ---
     print(f"Loading checkpoint: {CHECKPOINT_PATH.name}...")

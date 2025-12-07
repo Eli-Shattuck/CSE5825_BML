@@ -1,13 +1,15 @@
 import random
 from datetime import datetime
 from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.amp.grad_scaler import GradScaler
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
-from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 
 # --- BESCHESS IMPORTS ---
@@ -55,11 +57,11 @@ SEED = 42
 EPOCHS = 10
 # Increased Batch Size for A100 (Feed the tensor cores!)
 # If you get OOM, reduce to 8192 or 4096
-BATCH_SIZE = 16384
-LAMBDA_BCE = 5.0
+BATCH_SIZE = 4096
+LAMBDA_BCE = 1.0
 GRAD_CLIP = 1.0
 
-LR_BACKBONE = 5e-5
+LR_BACKBONE = 1e-4
 LR_HEADS = 1e-4
 
 
