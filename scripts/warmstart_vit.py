@@ -182,9 +182,6 @@ for layer in model.classifier_head.children():
     if hasattr(layer, "reset_parameters"):
         layer.reset_parameters()
 
-# Compile model
-# model = torch.compile(model, mode="reduce-overhead")
-
 # Initialize Proxy Loss with NEW Class Count (7)
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
@@ -276,18 +273,6 @@ def run_epoch(optimizer, scheduler=None, desc="Training"):
         scaler.scale(total).backward()
         scaler.unscale_(optimizer)
         nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
-        # --- DEBUG PROBE ---
-        if global_step % 50 == 0:
-            # Check the first layer of the backbone
-            first_layer_grad = model.patch_proj.weight.grad
-            if first_layer_grad is None:
-                print(
-                    f"!!! CRITICAL: Backbone Gradient is NONE at step {global_step} !!!"
-                )
-            else:
-                grad_norm = first_layer_grad.norm().item()
-                print(f"DEBUG Step {global_step}: Backbone Grad Norm = {grad_norm:.6f}")
-        # -------------------
         scaler.step(optimizer)
         scaler.update()
 
@@ -376,6 +361,9 @@ print("\n=== STAGE 2: FULL FINE-TUNING (Backbone Unfrozen) ===")
 # Unfreeze Everything
 for param in model.parameters():
     param.requires_grad = True
+
+# Compile model
+model = torch.compile(model, mode="reduce-overhead")
 
 # AGGRESSIVE OPTIMIZER SETTINGS
 # 1. Higher LR for Backbone (1e-4, matching heads)
