@@ -407,9 +407,17 @@ optimizer_s2 = optim.AdamW(
 scheduler_s2 = None
 
 for epoch in range(FINETUNE_EPOCHS):
+    # Pass 'None' for scheduler
     train_loss = run_epoch(
-        optimizer_s2, scheduler_s2, f"FineTune Epoch {epoch + 1}/{FINETUNE_EPOCHS}"
+        optimizer_s2, None, f"FineTune Epoch {epoch + 1}/{FINETUNE_EPOCHS}"
     )
+
+    # --- DEBUGGING: Check if weights are actually moving ---
+    # Print the norm of the first layer's weights. If this doesn't change, we are frozen.
+    with torch.no_grad():
+        param_norm = model.patch_proj.weight.norm().item()
+        grad_scale = scaler.get_scale()
+        print(f"DEBUG: Layer Norm: {param_norm:.5f} | Grad Scaler: {grad_scale}")
 
     # --- EVALUATION ---
     model.eval()
