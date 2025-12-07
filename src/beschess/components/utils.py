@@ -820,3 +820,61 @@ def compute_binary_accuracy(
             num_batches += 1
 
     return total_acc / num_batches if num_batches > 0 else 0.0
+
+
+def compute_geometry_metrics(
+    model,
+    loss_fn,
+    val_loader,
+    device,
+):
+    model.eval()
+
+    # 1. Get a batch of embeddings and labels
+    # Just grab one batch for speed, or loop for full validation
+    boards, labels = next(iter(val_loader))
+    boards, labels = boards.to(device), labels.to(device)
+
+    with torch.no_grad():
+        embeddings, _ = model(boards)  # Get normalized embeddings
+
+    # 2. Calculate Pairwise Distances of Embeddings
+    # Shape: (batch, batch)
+    dists = 1.0 - torch.mm(embeddings, embeddings.t())
+
+    # Create masks for Pos/Neg pairs (handling multilabel if needed)
+    # Simple single-label approximation for speed:
+    # labels_equal = labels.unsqueeze(0) == labels.unsqueeze(1)
+
+    # Better Jaccard approximation for your Multilabel case:
+    intersection = torch.mm(labels.float(), labels.float().t())
+    union = labels.sum(1, keepdim=True) + labels.sum(1, keepdim=True).t() - intersection
+    jaccard = intersection / (union + 1e-8)
+
+    # Masks
+    pos_mask = jaccard > 0.9  # "Exact Match"
+    neg_mask = jaccard < 0.1  # "Disjoint"
+
+    avg_pos_dist = dists[pos_mask].mean().item()
+    avg_neg_dist = dists[neg_mask].mean().item()
+
+    # 3. Calculate Proxy Spread (The "Anchor Health")
+    # Proxy Anchor loss stores proxies in 'loss_fn.proxies'
+    if hasattr(loss_fn, "proxies"):
+        proxies = loss_fn.proxies
+        # Normalize proxies to check angular distance
+        proxies_norm = torch.nn.functional.normalize(proxies, p=2, dim=1)
+        proxy_dists = 1.0 - torch.mm(proxies_norm, proxies_norm.t())
+
+        # Mask out self-distance (diagonal is always 0)
+        mask = ~torch.eye(proxy_dists.shape[0], dtype=bool, device=device)
+        avg_proxy_spread = proxy_dists[mask].mean().item()
+    else:
+        avg_proxy_spread = 0.0
+
+    print(f"--- Geometry Stats ---")
+    print(f"Avg Neg Dist (Red Curve Peak): {avg_neg_dist:.4f} (Target: >0.8)")
+    print(f"Avg Pos Dist (Green Curve Peak): {avg_pos_dist:.4f} (Target: <0.2)")
+    print(f"Proxy Spread: {avg_proxy_spread:.4f} (Target: High)")
+
+    return avg_pos_dist, avg_neg_dist, avg_proxy_spread

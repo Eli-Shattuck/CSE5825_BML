@@ -20,6 +20,7 @@ from beschess.components.utils import (
     compute_proxy_map,
     compute_tsne_embeddings,
     compute_binary_accuracy,
+    compute_geometry_metrics,
     evaluate_proxy_cos,
     plot_tsne_embeddings,
 )
@@ -306,6 +307,13 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
 
     val_binary_acc = compute_binary_accuracy(model, val_loader, device)
 
+    avg_pos_dist, avg_neg_dist, avg_proxy_spread = compute_geometry_metrics(
+        model,
+        loss_fn_emb,
+        val_puzzle_loader,
+        device,
+    )
+
     metrics = {
         "val_map@1": val_map[1],
         "val_map@3": val_map[3],
@@ -313,6 +321,9 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         "val_hitrate@3": hitrate[3],
         "val_binary_acc": val_binary_acc,
         "train_loss": avg_train_loss,
+        "avg_pos_dist": avg_pos_dist,
+        "avg_neg_dist": avg_neg_dist,
+        "avg_proxy_spread": avg_proxy_spread,
     }
 
     writer.add_scalar("Val/MAP@1", val_map[1], global_step)
@@ -320,6 +331,9 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
     writer.add_scalar("Val/HitRate@3", hitrate[3], global_step)
     writer.add_scalar("Val/Binary_Acc", val_binary_acc, global_step)
+    writer.add_scalar("Val/Avg_Pos_Dist", avg_pos_dist, global_step)
+    writer.add_scalar("Val/Avg_Neg_Dist", avg_neg_dist, global_step)
+    writer.add_scalar("Val/Avg_Proxy_Spread", avg_proxy_spread, global_step)
 
     checkpoint_manager.check(
         model,
@@ -355,7 +369,10 @@ for epoch in tqdm(range(EPOCHS), desc="Training Epochs"):
         f"Train Loss: {avg_train_loss:.4f} | "
         f"MAP@3: {val_map[3]:.4f} | "
         f"HR@1: {hitrate[1]:.4f} | "
-        f"Val Binary Acc: {val_binary_acc:.4f}"
+        f"Val Binary Acc: {val_binary_acc:.4f} | "
+        f"Avg Pos Dist: {avg_pos_dist:.4f} | "
+        f"Avg Neg Dist: {avg_neg_dist:.4f} | "
+        f"Avg Proxy Spread: {avg_proxy_spread:.4f}"
     )
 
 writer.close()
