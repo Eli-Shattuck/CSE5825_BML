@@ -354,7 +354,12 @@ for epoch in range(WARMUP_EPOCHS):
     print(f"Warmup Epoch {epoch + 1} Loss: {loss:.4f}")
 
     checkpoint_manager._save_checkpoint(
-        model, loss_fn_emb, optimizer_s1, None, {"train_loss": loss}, str(epoch)
+        model,
+        loss_fn_emb,
+        optimizer_s1,
+        None,
+        {"train_loss": loss},
+        f"warmup_epoch_{epoch + 1}",
     )
 
 # ==========================================

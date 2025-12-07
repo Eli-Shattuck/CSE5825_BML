@@ -8,7 +8,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 from torch.amp.grad_scaler import GradScaler
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # --- BESCHESS IMPORTS ---
@@ -46,18 +45,21 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
-# !!! CRITICAL: POINT THIS TO YOUR STAGE 1 OUTPUT !!!
-WARMUP_CHECKPOINT = CHECKPOINT_DIR / "FineTune_Stage1_Completed" / "warmup_complete.pt"
+# !!! POINT THIS TO YOUR STAGE 1 OUTPUT !!!
+WARMUP_CHECKPOINT = (
+    CHECKPOINT_DIR / "FineTune_7Class_20251206_222159" / "warmup_epoch_1.pt"
+)
 
-# HYPERPARAMETERS
+# HYPERPARAMETERS FOR A100
 SEED = 42
 EPOCHS = 10
-BATCH_SIZE = 4096
+# Increased Batch Size for A100 (Feed the tensor cores!)
+# If you get OOM, reduce to 8192 or 4096
+BATCH_SIZE = 16384
 LAMBDA_BCE = 5.0
 GRAD_CLIP = 1.0
 
-# Learning Rates (Aggressive for Stage 2)
-LR_BACKBONE = 5e-5  # Unfrozen backbone needs to move
+LR_BACKBONE = 5e-5
 LR_HEADS = 1e-4
 
 
@@ -69,12 +71,13 @@ def evaluate_binary_accuracy(model, loader, device):
     model.eval()
     total_acc = 0.0
     num_batches = 0
-    with torch.no_grad():
+
+    # We use Autocast in eval too for speed
+    with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
         for inputs, targets in loader:
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
-            # 0 = Puzzle, 1 = Negative
             is_puzzle_mask = targets[:, 0] == 0
             binary_targets = is_puzzle_mask.float().unsqueeze(1)
 
@@ -84,6 +87,7 @@ def evaluate_binary_accuracy(model, loader, device):
 
             total_acc += acc.item()
             num_batches += 1
+
     return total_acc / num_batches if num_batches > 0 else 0.0
 
 
@@ -95,13 +99,17 @@ if __name__ == "__main__":
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
+
+    # A100 Matmul Precision
     torch.set_float32_matmul_precision("high")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # 1. LOAD DATA (RAM MODE + BALANCING)
+    # 1. LOAD DATA (RAM MODE)
     print("Loading data into RAM...")
-    quiet_boards = np.load(DATA_DIR / "quiet_boards_preeval.npy")  # No mmap_mode="r"
+    quiet_boards = np.load(
+        DATA_DIR / "quiet_boards_preeval.npy"
+    )  # Standard load (Fastest for training)
     puzzle_boards = np.load(DATA_DIR / "boards_packed.npy")
     puzzle_labels = np.load(DATA_DIR / "tags_packed.npy")
 
@@ -131,7 +139,7 @@ if __name__ == "__main__":
     q_train, p_train = splits["train"]
     q_val, p_val = splits["val"]
 
-    # Dataloaders
+    # Dataloaders - Increased Workers for high throughput
     train_loader = DataLoader(
         dataset,
         batch_sampler=BalancedBatchSampler(
@@ -140,17 +148,18 @@ if __name__ == "__main__":
         num_workers=8,
         pin_memory=True,
         persistent_workers=True,
-        prefetch_factor=2,
+        prefetch_factor=4,
     )
+    # Validation loaders can be smaller/standard
     val_loader = DataLoader(
         dataset,
         batch_sampler=BalancedBatchSampler(
-            dataset, q_val, p_val, batch_size=512, steps_per_epoch=100
+            dataset, q_val, p_val, batch_size=2048, steps_per_epoch=50
         ),
         num_workers=4,
     )
     val_puzzle_loader = DataLoader(
-        Subset(dataset, p_val), batch_size=512, num_workers=4
+        Subset(dataset, p_val), batch_size=2048, num_workers=4
     )
 
     # 2. MODEL SETUP
@@ -163,16 +172,15 @@ if __name__ == "__main__":
     if WARMUP_CHECKPOINT.exists():
         print(f"Loading Warmup State from {WARMUP_CHECKPOINT}...")
         checkpoint = torch.load(WARMUP_CHECKPOINT, map_location=device)
-        # We load strictly because Stage 1 should have aligned the shapes
         model.load_state_dict(checkpoint.get("model_state_dict", checkpoint))
     else:
         raise FileNotFoundError(f"Checkpoint not found at {WARMUP_CHECKPOINT}")
 
-    # COMPILE (Full Optimization)
-    print("Compiling model (reduce-overhead)...")
-    model = torch.compile(model, mode="reduce-overhead")
+    # COMPILE (A100 OPTIMIZED)
+    print("Compiling model (max-autotune)... this may take 2-3 minutes to start...")
+    # max-autotune gives the highest throughput for GPUs
+    model = torch.compile(model, mode="max-autotune")
 
-    # Loss & Optimizer
     loss_fn_emb = ProxyAnchor(
         n_classes=len(TAG_NAMES), embedding_dim=128, margin=0.4, alpha=8
     ).to(device)
@@ -185,8 +193,12 @@ if __name__ == "__main__":
         ]
     )
 
-    scaler = GradScaler()
-    run_name = f"FineTune_Stage2_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    # Scaler for BF16 is optional but good practice to keep enabled=False or standard.
+    # BFloat16 has huge range so scaling is rarely needed, but we use it for safety.
+    # If this errors, set enabled=False.
+    scaler = GradScaler(enabled=False)
+
+    run_name = f"FineTune_Stage2_A100_{datetime.now().strftime('%Y%m%d_%H%M')}"
     (CHECKPOINT_DIR / run_name).mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir=LOG_DIR / run_name)
     checkpoint_manager = CheckpointManager(
@@ -195,7 +207,7 @@ if __name__ == "__main__":
 
     # 3. TRAINING LOOP
     global_step = 0
-    print("Starting Training (Stage 2)...")
+    print("Starting Training...")
 
     for epoch in range(EPOCHS):
         model.train()
@@ -207,43 +219,47 @@ if __name__ == "__main__":
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
-            # Mask: 0 = Puzzle, 1 = Negative
             is_puzzle_mask = targets[:, 0] == 0
             binary_targets = is_puzzle_mask.float().unsqueeze(1)
+            puzzle_targets = targets[is_puzzle_mask][:, 1:]
 
             optimizer.zero_grad()
 
-            # Forward (Full Batch - Static Shape)
-            embeddings, puzzle_logits = model(inputs)
+            # --- A100 SPEED: BFloat16 AUTOCAST ---
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                # Forward (Full Batch)
+                embeddings, puzzle_logits = model(inputs)
 
-            # Binary Loss
-            loss_bce = loss_fn_binary(puzzle_logits, binary_targets)
+                # Losses
+                loss_bce = loss_fn_binary(puzzle_logits, binary_targets)
 
-            # Metric Loss (Slicing Output)
-            if is_puzzle_mask.any():
-                # We slice the output embeddings, which is cheaper/safer for compile
-                puzzle_embeddings = embeddings[is_puzzle_mask]
-                puzzle_labels_batch = targets[is_puzzle_mask][:, 1:]
-                loss_emd = loss_fn_emb(puzzle_embeddings, puzzle_labels_batch)
-            else:
-                loss_emd = torch.tensor(0.0, device=device)
+                # Masking inside autocast
+                if is_puzzle_mask.any():
+                    # Slicing OUTPUT is safe for graph
+                    loss_emd = loss_fn_emb(embeddings[is_puzzle_mask], puzzle_targets)
+                else:
+                    loss_emd = torch.tensor(0.0, device=device)
 
-            loss = loss_emd + (LAMBDA_BCE * loss_bce)
+                loss = loss_emd + (LAMBDA_BCE * loss_bce)
 
+            # Backward
+            # Note: With enabled=False scaler, these just pass through
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
             scaler.step(optimizer)
             scaler.update()
 
-            # Sparse Logging (Every 50 steps to avoid Sync Bottleneck)
+            # Sparse Logging (Every 50 steps) to avoid CPU bottlenecks
             if global_step % 50 == 0:
-                # Calculate metrics only on log step
-                preds = (torch.sigmoid(puzzle_logits) > 0.5).float()
-                acc = (preds == binary_targets).float().mean()
+                # Need to detach and float() to bring to CPU for logging
+                # Keep calc inside no_grad to save memory
+                with torch.no_grad():
+                    preds = (torch.sigmoid(puzzle_logits) > 0.5).float()
+                    acc = (preds == binary_targets).float().mean()
 
-                l_item = loss.item()
-                a_item = acc.item()
+                    l_item = loss.item()
+                    a_item = acc.item()
 
                 writer.add_scalar("Train/Loss", l_item, global_step)
                 writer.add_scalar("Train/Binary_Acc", a_item, global_step)
@@ -256,18 +272,22 @@ if __name__ == "__main__":
         # --- EVALUATION ---
         print(f"Evaluating Epoch {epoch + 1}...")
 
-        # 1. Binary Accuracy on Val Set (Checks for Overfitting)
+        # 1. Binary Accuracy
         val_bin_acc = evaluate_binary_accuracy(model, val_loader, device)
 
         # 2. Metric Performance
         model.eval()
+        # Evaluate Proxy Cos handles its own no_grad/logic
+        # We wrap the internal forward pass of evaluate_proxy_cos with autocast if possible
+        # but for simplicity we assume it runs fast enough in default precision or
+        # you can modify evaluate_proxy_cos to accept an autocast context.
+        # Here we just run it as is (Evaluations are rarely the bottleneck).
         similarity_matrix, val_labels_emb = evaluate_proxy_cos(
             model, loss_fn_emb, val_puzzle_loader, device
         )
 
-        # Move to CPU for metrics
         similarity_matrix = similarity_matrix.cpu()
-        val_labels_emb = val_labels_emb.cpu()[:, 1:]  # Remove binary index
+        val_labels_emb = val_labels_emb.cpu()[:, 1:]
 
         _, top_indices = torch.topk(similarity_matrix, k=3, dim=1)
         k_list = [1, 3]
@@ -279,7 +299,6 @@ if __name__ == "__main__":
         print(f"  > HR@1:  {hitrate[1]:.4f}")
         print(f"  > Bin Acc: {val_bin_acc:.4f}")
 
-        # Logging
         writer.add_scalar("Val/MAP@3", val_map[3], global_step)
         writer.add_scalar("Val/Binary_Acc", val_bin_acc, global_step)
 
@@ -287,7 +306,7 @@ if __name__ == "__main__":
             model, loss_fn_emb, optimizer, None, {"val_map@3": val_map[3]}, epoch
         )
 
-        # 3. T-SNE (Last Epoch)
+        # 3. T-SNE (Only last epoch to save time)
         if epoch == EPOCHS - 1:
             print("Generating T-SNE...")
             b_emb, b_lab, p_emb, p_lab, probs = compute_tsne_embeddings(
