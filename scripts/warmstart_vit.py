@@ -48,7 +48,7 @@ TAG_NAMES = [
 # 2. PATHS
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 CHECKPOINT_DIR = Path(__file__).resolve().parent.parent / "checkpoints"
-LOG_DIR = Path(__file__).resolve().parent.parent / "warm_logs"
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
 # !!! POINT THIS TO YOUR BEST PREVIOUS MODEL !!!
 PRETRAINED_CHECKPOINT = (
