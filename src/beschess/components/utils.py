@@ -872,9 +872,4 @@ def compute_geometry_metrics(
     else:
         avg_proxy_spread = 0.0
 
-    print(f"--- Geometry Stats ---")
-    print(f"Avg Neg Dist (Red Curve Peak): {avg_neg_dist:.4f} (Target: >0.8)")
-    print(f"Avg Pos Dist (Green Curve Peak): {avg_pos_dist:.4f} (Target: <0.2)")
-    print(f"Proxy Spread: {avg_proxy_spread:.4f} (Target: High)")
-
     return avg_pos_dist, avg_neg_dist, avg_proxy_spread
