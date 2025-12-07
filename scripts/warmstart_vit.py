@@ -7,9 +7,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.amp.grad_scaler import GradScaler
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
-from torch.amp.grad_scaler import GradScaler
 from tqdm import tqdm
 
 # --- BESCHESS IMPORTS ---
@@ -18,6 +18,7 @@ from beschess.components.loss import ProxyAnchor
 from beschess.components.net.vit import MultiTaskViT
 from beschess.components.utils import (
     CheckpointManager,
+    clean_state_dict,
     compute_proxy_hitrate,
     compute_proxy_map,
     compute_tsne_embeddings,
@@ -153,6 +154,7 @@ if PRETRAINED_CHECKPOINT.exists():
 
     # Handle state dict structure (sometimes wrapped in 'model_state_dict')
     state_dict = checkpoint.get("model_state_dict", checkpoint)
+    state_dict = clean_state_dict(state_dict)
     model_state = model.state_dict()
 
     # --- SURGERY ---
