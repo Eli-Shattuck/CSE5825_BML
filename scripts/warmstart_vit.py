@@ -353,99 +353,103 @@ for epoch in range(WARMUP_EPOCHS):
     loss = run_epoch(optimizer_s1, None, f"Warmup Epoch {epoch + 1}")
     print(f"Warmup Epoch {epoch + 1} Loss: {loss:.4f}")
 
+    checkpoint_manager._save_checkpoint(
+        model, loss_fn_emb, optimizer_s1, None, {"train_loss": loss}, str(epoch)
+    )
+
 # ==========================================
 # STAGE 2: FINE-TUNING (Backbone Unfrozen)
 # ==========================================
 
-print("\n=== STAGE 2: FULL FINE-TUNING (Backbone Unfrozen) ===")
-
-# Unfreeze Everything
-for param in model.parameters():
-    param.requires_grad = True
-
-# Compile model
-torch._dynamo.reset()
-print("Compiling model...")
-model = torch.compile(model, mode="reduce-overhead", dynamic=True)
-
-# AGGRESSIVE OPTIMIZER SETTINGS
-# 1. Higher LR for Backbone (1e-4, matching heads)
-# 2. Lower Weight Decay (1e-4, preventing over-regularization)
-optimizer_s2 = optim.AdamW(
-    [
-        {"params": model.parameters(), "lr": 1e-4, "weight_decay": 1e-4},
-        {"params": loss_fn_emb.parameters(), "lr": 1e-3, "weight_decay": 1e-4},
-    ]
-)
-
-# REMOVED SCHEDULER
-# We want constant, raw power to break the stagnation.
-scheduler_s2 = None
-
-for epoch in range(FINETUNE_EPOCHS):
-    # Pass 'None' for scheduler
-    train_loss = run_epoch(
-        optimizer_s2, None, f"FineTune Epoch {epoch + 1}/{FINETUNE_EPOCHS}"
-    )
-
-    # --- DEBUGGING: Check if weights are actually moving ---
-    # Print the norm of the first layer's weights. If this doesn't change, we are frozen.
-    with torch.no_grad():
-        param_norm = model.patch_proj.weight.norm().item()
-        grad_scale = scaler.get_scale()
-        print(f"DEBUG: Layer Norm: {param_norm:.5f} | Grad Scaler: {grad_scale}")
-
-    # --- EVALUATION ---
-    model.eval()
-
-    # 1. Compute Metric Performance (MAP/HitRate)
-    similarity_matrix, val_labels = evaluate_proxy_cos(
-        model, loss_fn_emb, val_puzzle_loader, device
-    )
-
-    similarity_matrix = similarity_matrix.cpu()
-    val_labels = val_labels.cpu()[:, 1:]  # Remove binary index
-
-    _, top_indices = torch.topk(similarity_matrix, k=3, dim=1)
-    k_list = [1, 3]
-    val_map = compute_proxy_map(top_indices, val_labels, k_list)
-    hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
-    val_binary_acc = compute_binary_accuracy(model, val_loader, device)
-
-    print(
-        f"Epoch {epoch + 1} | Loss: {train_loss:.4f} | MAP@3: {val_map[3]:.4f} | HR@1: {hitrate[1]:.4f} | Binary Acc: {val_binary_acc:.4f}"
-    )
-
-    writer.add_scalar("Val/MAP@3", val_map[3], global_step)
-    writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
-    writer.add_scalar("Val/Binary_Acc", val_binary_acc, global_step)
-
-    metrics = {
-        "binary_acc": val_binary_acc,
-        "val_map@3": val_map[3],
-        "val_hitrate@1": hitrate[1],
-        "train_loss": train_loss,
-    }
-
-    checkpoint_manager.check(
-        model, loss_fn_emb, optimizer_s2, scheduler_s2, metrics, epoch
-    )
-
-    # 2. T-SNE Visualization (Every 5 epochs or last)
-    if epoch % 5 == 0 or epoch == FINETUNE_EPOCHS - 1:
-        board_embeddings, board_labels, proxy_embeddings, proxy_labels, all_probs = (
-            compute_tsne_embeddings(model, loss_fn_emb, val_loader, device)
-        )
-        fig = plot_tsne_embeddings(
-            board_embeddings,
-            board_labels,
-            proxy_embeddings,
-            all_probs,
-            title=f"Fine-Tune Epoch {epoch + 1}",
-            tag_names=TAG_NAMES,
-        )
-        writer.add_figure("Embeddings/TSNE", fig, global_step)
-        plt.close(fig)
-
-writer.close()
-print("Fine-tuning complete.")
+# print("\n=== STAGE 2: FULL FINE-TUNING (Backbone Unfrozen) ===")
+#
+# # Unfreeze Everything
+# for param in model.parameters():
+#     param.requires_grad = True
+#
+# # Compile model
+# torch._dynamo.reset()
+# print("Compiling model...")
+# model = torch.compile(model, mode="reduce-overhead", dynamic=True)
+#
+# # AGGRESSIVE OPTIMIZER SETTINGS
+# # 1. Higher LR for Backbone (1e-4, matching heads)
+# # 2. Lower Weight Decay (1e-4, preventing over-regularization)
+# optimizer_s2 = optim.AdamW(
+#     [
+#         {"params": model.parameters(), "lr": 1e-4, "weight_decay": 1e-4},
+#         {"params": loss_fn_emb.parameters(), "lr": 1e-3, "weight_decay": 1e-4},
+#     ]
+# )
+#
+# # REMOVED SCHEDULER
+# # We want constant, raw power to break the stagnation.
+# scheduler_s2 = None
+#
+# for epoch in range(FINETUNE_EPOCHS):
+#     # Pass 'None' for scheduler
+#     train_loss = run_epoch(
+#         optimizer_s2, None, f"FineTune Epoch {epoch + 1}/{FINETUNE_EPOCHS}"
+#     )
+#
+#     # --- DEBUGGING: Check if weights are actually moving ---
+#     # Print the norm of the first layer's weights. If this doesn't change, we are frozen.
+#     with torch.no_grad():
+#         param_norm = model.patch_proj.weight.norm().item()
+#         grad_scale = scaler.get_scale()
+#         print(f"DEBUG: Layer Norm: {param_norm:.5f} | Grad Scaler: {grad_scale}")
+#
+#     # --- EVALUATION ---
+#     model.eval()
+#
+#     # 1. Compute Metric Performance (MAP/HitRate)
+#     similarity_matrix, val_labels = evaluate_proxy_cos(
+#         model, loss_fn_emb, val_puzzle_loader, device
+#     )
+#
+#     similarity_matrix = similarity_matrix.cpu()
+#     val_labels = val_labels.cpu()[:, 1:]  # Remove binary index
+#
+#     _, top_indices = torch.topk(similarity_matrix, k=3, dim=1)
+#     k_list = [1, 3]
+#     val_map = compute_proxy_map(top_indices, val_labels, k_list)
+#     hitrate = compute_proxy_hitrate(top_indices, val_labels, k_list)
+#     val_binary_acc = compute_binary_accuracy(model, val_loader, device)
+#
+#     print(
+#         f"Epoch {epoch + 1} | Loss: {train_loss:.4f} | MAP@3: {val_map[3]:.4f} | HR@1: {hitrate[1]:.4f} | Binary Acc: {val_binary_acc:.4f}"
+#     )
+#
+#     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
+#     writer.add_scalar("Val/HitRate@1", hitrate[1], global_step)
+#     writer.add_scalar("Val/Binary_Acc", val_binary_acc, global_step)
+#
+#     metrics = {
+#         "binary_acc": val_binary_acc,
+#         "val_map@3": val_map[3],
+#         "val_hitrate@1": hitrate[1],
+#         "train_loss": train_loss,
+#     }
+#
+#     checkpoint_manager.check(
+#         model, loss_fn_emb, optimizer_s2, scheduler_s2, metrics, epoch
+#     )
+#
+#     # 2. T-SNE Visualization (Every 5 epochs or last)
+#     if epoch % 5 == 0 or epoch == FINETUNE_EPOCHS - 1:
+#         board_embeddings, board_labels, proxy_embeddings, proxy_labels, all_probs = (
+#             compute_tsne_embeddings(model, loss_fn_emb, val_loader, device)
+#         )
+#         fig = plot_tsne_embeddings(
+#             board_embeddings,
+#             board_labels,
+#             proxy_embeddings,
+#             all_probs,
+#             title=f"Fine-Tune Epoch {epoch + 1}",
+#             tag_names=TAG_NAMES,
+#         )
+#         writer.add_figure("Embeddings/TSNE", fig, global_step)
+#         plt.close(fig)
+#
+# writer.close()
+# print("Fine-tuning complete.")
