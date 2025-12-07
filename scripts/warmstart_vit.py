@@ -358,33 +358,53 @@ for epoch in range(WARMUP_EPOCHS):
 # ==========================================
 # STAGE 2: FINE-TUNING (Backbone Unfrozen)
 # ==========================================
+# print("\n=== STAGE 2: FULL FINE-TUNING (Backbone Unfrozen) ===")
+#
+# # Unfreeze Everything
+# for param in model.parameters():
+#     param.requires_grad = True
+#
+# # Optimizer for Stage 2
+# optimizer_s2 = optim.AdamW(
+#     [
+#         # Backbone gets low LR
+#         {"params": model.parameters(), "lr": FINETUNE_LR_BACKBONE, "weight_decay": 0.1},
+#         # Heads/Proxies get slightly higher LR
+#         {
+#             "params": loss_fn_emb.parameters(),
+#             "lr": FINETUNE_LR_HEADS,
+#             "weight_decay": 1e-4,
+#         },
+#     ]
+# )
+#
+# scheduler_s2 = optim.lr_scheduler.OneCycleLR(
+#     optimizer_s2,
+#     max_lr=[FINETUNE_LR_BACKBONE, FINETUNE_LR_HEADS],
+#     steps_per_epoch=len(train_loader),
+#     epochs=FINETUNE_EPOCHS,
+#     pct_start=0.3,
+# )
+
 print("\n=== STAGE 2: FULL FINE-TUNING (Backbone Unfrozen) ===")
 
 # Unfreeze Everything
 for param in model.parameters():
     param.requires_grad = True
 
-# Optimizer for Stage 2
+# AGGRESSIVE OPTIMIZER SETTINGS
+# 1. Higher LR for Backbone (1e-4, matching heads)
+# 2. Lower Weight Decay (1e-4, preventing over-regularization)
 optimizer_s2 = optim.AdamW(
     [
-        # Backbone gets low LR
-        {"params": model.parameters(), "lr": FINETUNE_LR_BACKBONE, "weight_decay": 0.1},
-        # Heads/Proxies get slightly higher LR
-        {
-            "params": loss_fn_emb.parameters(),
-            "lr": FINETUNE_LR_HEADS,
-            "weight_decay": 1e-4,
-        },
+        {"params": model.parameters(), "lr": 1e-4, "weight_decay": 1e-4},
+        {"params": loss_fn_emb.parameters(), "lr": 1e-3, "weight_decay": 1e-4},
     ]
 )
 
-scheduler_s2 = optim.lr_scheduler.OneCycleLR(
-    optimizer_s2,
-    max_lr=[FINETUNE_LR_BACKBONE, FINETUNE_LR_HEADS],
-    steps_per_epoch=len(train_loader),
-    epochs=FINETUNE_EPOCHS,
-    pct_start=0.3,
-)
+# REMOVED SCHEDULER
+# We want constant, raw power to break the stagnation.
+scheduler_s2 = None
 
 for epoch in range(FINETUNE_EPOCHS):
     train_loss = run_epoch(
@@ -409,7 +429,7 @@ for epoch in range(FINETUNE_EPOCHS):
     val_binary_acc = compute_binary_accuracy(model, val_loader, device)
 
     print(
-        f"Epoch {epoch + 1} | Loss: {train_loss:.4f} | MAP@3: {val_map[3]:.4f} | HR@1: {hitrate[1]:.4f}"
+        f"Epoch {epoch + 1} | Loss: {train_loss:.4f} | MAP@3: {val_map[3]:.4f} | HR@1: {hitrate[1]:.4f} | Binary Acc: {val_binary_acc:.4f}"
     )
 
     writer.add_scalar("Val/MAP@3", val_map[3], global_step)
