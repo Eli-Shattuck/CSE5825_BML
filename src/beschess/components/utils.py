@@ -126,6 +126,7 @@ class CheckpointManager:
                 "scheduler_state_dict": scheduler.state_dict(),
                 "metrics": metrics,
             }
+
         checkpoint_path = self.save_dir / file_name
         torch.save(checkpoint, checkpoint_path)
 
