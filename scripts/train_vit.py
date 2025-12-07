@@ -180,7 +180,7 @@ loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
     embedding_dim=EMBEDDING_DIM,
     margin=0.4,
-    alpha=8,
+    alpha=32,
 ).to(device)
 
 loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
