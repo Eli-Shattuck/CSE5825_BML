@@ -783,7 +783,9 @@ def compute_quiet_margin(
 
 
 def compute_binary_accuracy(
-    model: nn.Module, loader: DataLoader, device: torch.Device
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
 ) -> float:
     """
     Calculates Binary Accuracy (Puzzle vs Non-Puzzle)
