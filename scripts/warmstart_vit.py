@@ -93,12 +93,12 @@ hard_negatives_file = DATA_DIR / "hard_negatives.npy"
 puzzle_boards_file = DATA_DIR / "boards_packed.npy"
 puzzle_labels_file = DATA_DIR / "tags_packed.npy"  # Ensure this uses NEW 7-class map
 
-quiet_boards = np.load(quiet_boards_file, mmap_mode="r")
-puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")
-puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")
+quiet_boards = np.load(quiet_boards_file)
+puzzle_boards = np.load(puzzle_boards_file)
+puzzle_labels = np.load(puzzle_labels_file)
 
 try:
-    hard_negatives = np.load(hard_negatives_file, mmap_mode="r")
+    hard_negatives = np.load(hard_negatives_file)
     print(f"Found {len(hard_negatives)} Hard Negatives.")
 
     # --- BALANCING STRATEGY ---
@@ -305,12 +305,13 @@ def run_epoch(optimizer, scheduler=None, desc="Training"):
             if scheduler:
                 writer.add_scalar("Train/LR", scheduler.get_last_lr()[0], global_step)
 
+            pbar.set_postfix(
+                {"Loss": f"{total.item():.4f}", "Acc": f"{batch_acc.item():.4f}"}
+            )
+
         global_step += 1
 
         # Update progress bar text
-        pbar.set_postfix(
-            {"Loss": f"{total.item():.4f}", "Acc": f"{batch_acc.item():.4f}"}
-        )
 
     avg_loss = total_loss / len(train_loader)
     avg_acc = total_binary_acc / len(train_loader)
