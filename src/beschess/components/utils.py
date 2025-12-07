@@ -66,7 +66,7 @@ class CheckpointManager:
         model: nn.Module,
         loss_fn: nn.Module,
         optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        scheduler: torch.optim.lr_scheduler.LRScheduler | None,
         metrics: dict[str, float],
         epoch: int,
     ):
@@ -107,17 +107,25 @@ class CheckpointManager:
         model: nn.Module,
         loss_fn: nn.Module,
         optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        scheduler: torch.optim.lr_scheduler.LRScheduler | None,
         metrics: dict[str, float],
         file_name: str,
     ):
-        checkpoint = {
-            "model_state_dict": clean_state_dict(model.state_dict()),
-            "loss_fn_state_dict": loss_fn.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "metrics": metrics,
-        }
+        if scheduler is None:
+            checkpoint = {
+                "model_state_dict": clean_state_dict(model.state_dict()),
+                "loss_fn_state_dict": loss_fn.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "metrics": metrics,
+            }
+        else:
+            checkpoint = {
+                "model_state_dict": clean_state_dict(model.state_dict()),
+                "loss_fn_state_dict": loss_fn.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "metrics": metrics,
+            }
         checkpoint_path = self.save_dir / file_name
         torch.save(checkpoint, checkpoint_path)
 
