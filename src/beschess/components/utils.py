@@ -780,3 +780,27 @@ def compute_quiet_margin(
     accuracy = (margins > 0).float().mean().item()
 
     return avg_margin, accuracy
+
+
+def extract_attention_weights(model, x):
+    """
+    Runs inference and returns the attention weights from the encoder.
+
+    Args:
+        model: Your MultiTaskViT instance
+        x: Input tensor (Batch, Seq_Len, Dim)
+
+    Returns:
+        attn_tensor: (Layers, Batch, Heads, Seq_Len, Seq_Len)
+    """
+    model.eval()
+    with torch.no_grad():
+        embeddings, puzzle_logit = model(x)
+        puzzle_probs = torch.sigmoid(puzzle_logit)
+
+        all_layer_weights = []
+
+        for layer in model.encoder.layers:
+            all_layer_weights.append(layer.last_attn_weights.cpu())
+
+        return embeddings, puzzle_probs, torch.stack(all_layer_weights)

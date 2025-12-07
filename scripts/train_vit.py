@@ -48,7 +48,7 @@ torch.manual_seed(SEED)
 GRAD_CLIP = 1.0
 EPOCHS = 50
 MODEL_LR = 1e-4
-LOSS_LR = 5e-2
+LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
 LAMBDA_BCE = 5.0
@@ -137,7 +137,7 @@ val_puzzle_loader = DataLoader(
 )
 
 
-model = MultiTaskViT2D(
+model = MultiTaskViT(
     in_channels=17,
     embed_dim=256,
     num_heads=8,
@@ -159,7 +159,7 @@ optimizer = torch.optim.AdamW(
     [
         # Vit
         {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 0.1},
-        {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 0},
+        {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 1e-4},
     ]
 )
 

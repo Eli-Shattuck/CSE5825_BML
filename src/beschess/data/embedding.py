@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from ..utils import packed_to_tensor
 
-N_PUZZLE_LABELS = 8
+N_PUZZLE_LABELS = 7
 
 
 class PuzzleDataset(torch.utils.data.Dataset):

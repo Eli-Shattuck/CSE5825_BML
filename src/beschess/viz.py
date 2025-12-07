@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics.pairwise import cosine_distances
+import chess
+import chess.svg
 
 
 def plot_distance_distributions(embeddings, labels, n_samples=5000):
@@ -39,3 +41,26 @@ def plot_distance_distributions(embeddings, labels, n_samples=5000):
     plt.grid(True, alpha=0.3)
 
     plt.show()
+
+
+def plot_chessboard_attention_overlay(
+    board: chess.Board,
+    attention_map: np.ndarray,
+    query_idx: int,
+    head_idx: int,
+    depth: int,
+    size: int = 400,
+    cmap: str = "viridis",
+):
+    att = attention_map[depth, head_idx, query_idx][1:]
+    norm_att = (att - np.min(att)) / (np.max(att) - np.min(att) + 1e-8)
+    att_colors = plt.get_cmap(cmap)(norm_att)
+    hex_colors = [
+        "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+        for r, g, b, _ in att_colors
+    ]
+    squares_dict = {square: hex_colors[i] for i, square in enumerate(chess.SQUARES)}
+    focus_square = [chess.SQUARES[query_idx - 1]] if query_idx >= 0 else None
+    print(query_idx, focus_square)
+
+    return chess.svg.board(board, fill=squares_dict, squares=focus_square, size=size)

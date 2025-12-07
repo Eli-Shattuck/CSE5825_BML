@@ -10,28 +10,20 @@ from beschess.utils import board_to_packed
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data"
 
+# 1. VISUAL CORE CLASSES
 CORE_CLASSES = [
-    "LinearAttack",
-    "DoubleAttack",
-    "MatingNet",
-    "Overload",
-    "Displacement",
-    "Sacrifice",
-    "EndgameTactic",
-    "PieceEndgame",
+    "MatingNet",  # Rigid King-restriction geometry
+    "SpecialMove",  # Relies on Channels 13-17 (Castling/EP)
+    "Promotion",  # Relies on Pawn Rank (Row 0/7)
+    "DoubleAttack",  # Divergent Geometry (V-shape)
+    "LinearAttack",  # Alignment Geometry (I-shape)
+    "Punishment",  # Static Weakness (Undefended/Trapped)
+    "ForcingMove",  # Dynamic/Active moves (includes Sacrifices)
 ]
 
-# Merge classes into core clusters
+# 2. TAG MAPPING
 TAG_MAPPING = {
-    # Single Piece Attacks
-    "pin": "LinearAttack",
-    "skewer": "LinearAttack",
-    "xRayAttack": "LinearAttack",
-    # Piece Attacks on Multiple Targets
-    "fork": "DoubleAttack",
-    "discoveredAttack": "DoubleAttack",
-    "doubleCheck": "DoubleAttack",
-    # Matting Patterns
+    # --- Priority 1: MATING PATTERNS ---
     "mate": "MatingNet",
     "mateIn1": "MatingNet",
     "mateIn2": "MatingNet",
@@ -41,44 +33,107 @@ TAG_MAPPING = {
     "anastasiaMate": "MatingNet",
     "arabianMate": "MatingNet",
     "backRankMate": "MatingNet",
-    "balestraMate": "MatingNet",
-    "blindSwineMate": "MatingNet",
-    "bodenMate": "MatingNet",
-    "cornerMate": "MatingNet",
+    "bodensMate": "MatingNet",
     "doubleBishopMate": "MatingNet",
     "dovetailMate": "MatingNet",
     "hookMate": "MatingNet",
-    "killBoxMate": "MatingNet",
     "smotheredMate": "MatingNet",
-    "triangleMate": "MatingNet",
-    "vukovicMate": "MatingNet",
-    # Forcing Opponent to Defend Multiple Threats
-    "attraction": "Overload",
-    "trappedPiece": "Overload",
-    "hangingPiece": "Overload",
-    "exposedKing": "Overload",
-    # Positional/Tactical Gain by Moving Pieces but not Capturing
-    "deflection": "Displacement",
-    "interference": "Displacement",
-    # Giving up Material for Positional/Tactical Gain
-    "sacrifice": "Sacrifice",
-    "clearance": "Sacrifice",
-    "intermezzo": "Sacrifice",
-    "capturingDefender": "Sacrifice",
-    # Tactics that often appear in endgames
-    "promotion": "EndgameTactic",
-    "underPromotion": "EndgameTactic",
-    "zugzwang": "EndgameTactic",
-    "advancedPawn": "EndgameTactic",
-    "enPassant": "EndgameTactic",
-    # Endgame Types
-    "pawnEndgame": "PieceEndgame",
-    "rookEndgame": "PieceEndgame",
-    "bishopEndgame": "PieceEndgame",
-    "knightEndgame": "PieceEndgame",
-    "queenEndgame": "PieceEndgame",
-    "queenRookEndgame": "PieceEndgame",
+    # --- Priority 2: SPECIAL RULES  ---
+    "enPassant": "SpecialMove",
+    "castling": "SpecialMove",
+    # --- Priority 3: PROMOTION ---
+    "promotion": "Promotion",
+    "underPromotion": "Promotion",
+    "advancedPawn": "Promotion",
+    # --- Priority 4/5: GEOMETRY ---
+    "fork": "DoubleAttack",
+    "discoveredAttack": "DoubleAttack",
+    "doubleCheck": "DoubleAttack",
+    "pin": "LinearAttack",
+    "skewer": "LinearAttack",
+    "xRayAttack": "LinearAttack",
+    # --- Priority 6: STATIC WEAKNESS ---
+    "hangingPiece": "Punishment",
+    "trappedPiece": "Punishment",
+    "exposedKing": "Punishment",
+    # --- Priority 7: DYNAMIC/COMPLEX --
+    "attraction": "ForcingMove",
+    "deflection": "ForcingMove",
+    "interference": "ForcingMove",
+    "sacrifice": "ForcingMove",
+    "clearance": "ForcingMove",
+    "intermezzo": "ForcingMove",
+    "capturingDefender": "ForcingMove",
 }
+# CORE_CLASSES = [
+#     "LinearAttack",
+#     "DoubleAttack",
+#     "MatingNet",
+#     "Overload",
+#     "Displacement",
+#     "Sacrifice",
+#     "EndgameTactic",
+#     "PieceEndgame",
+# ]
+#
+# # Merge classes into core clusters
+# TAG_MAPPING = {
+#     # Single Piece Attacks
+#     "pin": "LinearAttack",
+#     "skewer": "LinearAttack",
+#     "xRayAttack": "LinearAttack",
+#     # Piece Attacks on Multiple Targets
+#     "fork": "DoubleAttack",
+#     "discoveredAttack": "DoubleAttack",
+#     "doubleCheck": "DoubleAttack",
+#     # Matting Patterns
+#     "mate": "MatingNet",
+#     "mateIn1": "MatingNet",
+#     "mateIn2": "MatingNet",
+#     "mateIn3": "MatingNet",
+#     "mateIn4": "MatingNet",
+#     "mateIn5": "MatingNet",
+#     "anastasiaMate": "MatingNet",
+#     "arabianMate": "MatingNet",
+#     "backRankMate": "MatingNet",
+#     "balestraMate": "MatingNet",
+#     "blindSwineMate": "MatingNet",
+#     "bodenMate": "MatingNet",
+#     "cornerMate": "MatingNet",
+#     "doubleBishopMate": "MatingNet",
+#     "dovetailMate": "MatingNet",
+#     "hookMate": "MatingNet",
+#     "killBoxMate": "MatingNet",
+#     "smotheredMate": "MatingNet",
+#     "triangleMate": "MatingNet",
+#     "vukovicMate": "MatingNet",
+#     # Forcing Opponent to Defend Multiple Threats
+#     "attraction": "Overload",
+#     "trappedPiece": "Overload",
+#     "hangingPiece": "Overload",
+#     "exposedKing": "Overload",
+#     # Positional/Tactical Gain by Moving Pieces but not Capturing
+#     "deflection": "Displacement",
+#     "interference": "Displacement",
+#     # Giving up Material for Positional/Tactical Gain
+#     "sacrifice": "Sacrifice",
+#     "clearance": "Sacrifice",
+#     "intermezzo": "Sacrifice",
+#     "capturingDefender": "Sacrifice",
+#     # Tactics that often appear in endgames
+#     "promotion": "EndgameTactic",
+#     "underPromotion": "EndgameTactic",
+#     "zugzwang": "EndgameTactic",
+#     "advancedPawn": "EndgameTactic",
+#     "enPassant": "EndgameTactic",
+#     # Endgame Types
+#     "pawnEndgame": "PieceEndgame",
+#     "rookEndgame": "PieceEndgame",
+#     "bishopEndgame": "PieceEndgame",
+#     "knightEndgame": "PieceEndgame",
+#     "queenEndgame": "PieceEndgame",
+#     "queenRookEndgame": "PieceEndgame",
+# }
 
 
 def clean_and_map_tags(tag_str):
@@ -101,7 +156,7 @@ def main():
         DATA_PATH / "lichess_db_puzzle.csv", usecols=["FEN", "Themes", "Moves"]
     )
 
-    print("Mapping Tags to 8 Core Clusters...")
+    print(f"Mapping Tags to {len(CORE_CLASSES)} Core Clusters...")
     df["clean_tags"] = df["Themes"].apply(clean_and_map_tags)
 
     # Filter empty rows

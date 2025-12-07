@@ -1,6 +1,11 @@
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from ...utils import clean_state_dict
+from .block import InterpretableTransformerEncoderLayer
 
 
 class MultiTaskViT(nn.Module):
@@ -132,3 +137,64 @@ class MultiTaskViT2D(nn.Module):
         puzzle_logits = self.classifier_head(global_feat)
 
         return embeddings, puzzle_logits
+
+
+def get_interpretable_vit(
+    in_channels: int = 17,
+    embed_dim: int = 256,
+    num_heads: int = 8,
+    depth: int = 6,
+    out_dim: int = 128,
+    path_to_weights: Path | str | None = None,
+) -> nn.Module:
+    encoder_layer = InterpretableTransformerEncoderLayer(
+        d_model=embed_dim,
+        nhead=num_heads,
+        dim_feedforward=embed_dim * 4,
+        dropout=0.1,
+        activation="gelu",
+        batch_first=True,
+        norm_first=True,
+    )
+
+    model = MultiTaskViT(
+        in_channels=in_channels,
+        embed_dim=embed_dim,
+        num_heads=num_heads,
+        depth=depth,
+        out_dim=out_dim,
+    )
+
+    model.encoder = nn.TransformerEncoder(
+        encoder_layer=encoder_layer,  # type: ignore
+        num_layers=depth,
+        enable_nested_tensor=False,
+    )
+
+    if path_to_weights is not None:
+        checkpoint = torch.load(path_to_weights, map_location="cpu")
+        state_dict = (
+            checkpoint["model_state_dict"]
+            if "model_state_dict" in checkpoint
+            else checkpoint
+        )
+        model.load_state_dict(clean_state_dict(state_dict), strict=True)
+
+    return model
+
+
+def extract_attention_weights(model, x):
+    model.eval()
+    with torch.no_grad():
+        embeddings, puzzle_logit = model(x)
+        puzzle_probs = torch.sigmoid(puzzle_logit)
+
+        all_layer_weights = []
+
+        for layer in model.encoder.layers:
+            all_layer_weights.append(layer.last_attn_weights.cpu())
+
+        all_layer_weights = torch.stack(all_layer_weights)
+        all_layer_weights = all_layer_weights.permute(1, 0, 2, 3, 4)
+
+        return embeddings, puzzle_probs, all_layer_weights

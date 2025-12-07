@@ -1,5 +1,6 @@
 data/*
 checkpoints/*
+logs/*
 
 .virtual_documents/
 # Byte-compiled / optimized / DLL files

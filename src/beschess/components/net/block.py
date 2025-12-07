@@ -21,50 +21,6 @@ class SEBlock(nn.Module):
         return x * y.expand_as(x)
 
 
-# class GATLayer(nn.Module):
-#     def __init__(
-#         self,
-#         in_dim: int,
-#         out_dim: int,
-#         adj_matrix: torch.Tensor,
-#     ):
-#         super().__init__()
-#         self.register_buffer("adj", adj_matrix)
-#         self.W = nn.Linear(in_dim, out_dim, bias=False)
-#         self.a = nn.Linear(2 * out_dim, 1, bias=False)
-#         self.leakyrelu = nn.LeakyReLU(0.2)
-#
-#         nn.init.xavier_uniform_(self.W.weight.data)
-#         nn.init.xavier_uniform_(self.a.weight.data)
-#
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         B, N, C = x.shape
-#
-#         # 1. Linear Transformation
-#         Wh = self.W(x)  # (B, 64, out_dim)
-#
-#         # 2. Attention Mechanism (Optimized)
-#         # We need to compute attention scores for all connected pairs.
-#         # Broadcast trick to compute all-pairs concatenation
-#         Wh_i = Wh.unsqueeze(2).repeat(1, 1, N, 1)  # (B, 64, 64, out_dim)
-#         Wh_j = Wh.unsqueeze(1).repeat(1, N, 1, 1)  # (B, 64, 64, out_dim)
-#
-#         a_input = torch.cat([Wh_i, Wh_j], dim=-1)  # (B, 64, 64, 2*out_dim)
-#         e = self.leakyrelu(self.a(a_input)).squeeze(-1)  # (B, 64, 64)
-#
-#         # 3. Mask with Adjacency Matrix (Critical Step)
-#         # Sets attention to -inf where no edge exists
-#         zero_vec = -9e15 * torch.ones_like(e)
-#         attention = torch.where(self.adj > 0, e, zero_vec)
-#
-#         attention = F.softmax(attention, dim=-1)  # (B, 64, 64)
-#
-#         # 4. Message Passing
-#         h_prime = torch.matmul(attention, Wh)  # (B, 64, out_dim)
-#
-#         return F.elu(h_prime)
-
-
 class GATLayer(nn.Module):
     def __init__(
         self,
@@ -80,13 +36,10 @@ class GATLayer(nn.Module):
         self.head_dim = out_dim // num_heads
         self.concat = concat
 
-        # Merge input projection into one layer for speed (Q, K, V)
         self.qkv = nn.Linear(in_dim, 3 * out_dim, bias=False)
 
         self.dropout = nn.Dropout(dropout)
 
-        # Prepare mask for SDPA (Scaled Dot Product Attention)
-        # We need to convert 1.0/0.0 mask to 0.0/-inf for adding
         self.register_buffer("additive_mask", None)
         self.register_buffer("adj", adj_matrix)
 
@@ -96,26 +49,18 @@ class GATLayer(nn.Module):
 
         B, N, _ = h.shape
 
-        # 1. Prepare Mask (One-time setup if not done)
         if self.additive_mask is None:
-            # Convert binary adj (1=connect, 0=block) to additive mask (0=keep, -inf=block)
             self.additive_mask = torch.zeros_like(self.adj)
             self.additive_mask = self.additive_mask.masked_fill(
                 self.adj == 0, float("-inf")
             )
-            # Reshape for broadcasting: (1, 1, N, N)
             self.additive_mask = self.additive_mask.unsqueeze(0).unsqueeze(0)
 
-        # 2. Optimized Projection
-        # qkv: (B, N, 3 * H * D)
         qkv = self.qkv(h)
-        # Split: (B, N, H, D)
         q, k, v = qkv.view(B, N, 3, self.num_heads, self.head_dim).permute(
             2, 0, 3, 1, 4
         )
 
-        # 3. FAST ATTENTION (Triggers Fused Kernels)
-        # passing is_causal=False because we provide a custom mask
         out = F.scaled_dot_product_attention(
             q,
             k,
@@ -124,12 +69,110 @@ class GATLayer(nn.Module):
             dropout_p=self.dropout.p if self.training else 0.0,
         )
 
-        # out: (B, H, N, D) -> (B, N, H, D)
         out = out.transpose(1, 2)
 
         if self.concat:
             out = out.reshape(B, N, -1)
         else:
-            out = out.mean(dim=2)  # Averaging heads
+            out = out.mean(dim=2)
 
         return out
+
+
+class InterpretableTransformerEncoderLayer(nn.Module):
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        dim_feedforward=2048,
+        dropout=0.1,
+        activation="relu",
+        layer_norm_eps=1e-5,
+        batch_first=False,
+        norm_first=False,
+        device=None,
+        dtype=None,
+    ):
+        super().__init__()
+
+        # 1. Initialize params to match standard PyTorch layer naming
+        factory_kwargs = {"device": device, "dtype": dtype}
+        self.self_attn = nn.MultiheadAttention(
+            d_model, nhead, dropout=dropout, batch_first=batch_first, **factory_kwargs
+        )
+
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(d_model, dim_feedforward, **factory_kwargs)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model, **factory_kwargs)
+
+        self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+        # Activation function helper
+        if activation == "relu":
+            self.activation = F.relu
+        elif activation == "gelu":
+            self.activation = F.gelu
+        elif activation == "silu" or activation == "swish":
+            self.activation = F.silu
+        else:
+            raise ValueError(f"Activation {activation} not supported in this snippet")
+
+        self.norm_first = norm_first
+
+        # Placeholder to store the most recent attention weights
+        # Shape: (Batch, Num_Heads, Seq_Len, Seq_Len)
+        self.last_attn_weights = None
+
+    def _sa_block(self, x, attn_mask, key_padding_mask, is_causal=False):
+        # We override this block to capture weights
+        x, weights = self.self_attn(
+            x,
+            x,
+            x,
+            attn_mask=attn_mask,
+            key_padding_mask=key_padding_mask,
+            need_weights=True,  # VITAL: Ask for weights
+            average_attn_weights=False,  # VITAL: Keep heads separate
+            is_causal=is_causal,
+        )
+        self.last_attn_weights = weights  # <--- Capture happens here
+        return self.dropout1(x)
+
+    def _ff_block(self, x):
+        x = self.linear2(self.dropout(self.activation(self.linear1(x))))
+        return self.dropout2(x)
+
+    def forward(
+        self,
+        src: torch.Tensor,
+        src_mask: torch.Tensor | None = None,
+        src_key_padding_mask: torch.Tensor | None = None,
+        is_causal: bool = False,
+    ) -> torch.Tensor:
+        x = src
+
+        # Branch 1: Pre-Normalization (norm_first=True)
+        # x = x + attn(norm1(x))
+        # x = x + ffn(norm2(x))
+        if self.norm_first:
+            x = x + self._sa_block(
+                self.norm1(x), src_mask, src_key_padding_mask, is_causal=is_causal
+            )
+            x = x + self._ff_block(self.norm2(x))
+
+        # Branch 2: Post-Normalization (norm_first=False, PyTorch default)
+        # x = norm1(x + attn(x))
+        # x = norm2(x + ffn(x))
+        else:
+            x = self.norm1(
+                x
+                + self._sa_block(x, src_mask, src_key_padding_mask, is_causal=is_causal)
+            )
+            x = self.norm2(x + self._ff_block(x))
+
+        return x

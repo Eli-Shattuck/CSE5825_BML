@@ -2,7 +2,7 @@ import chess
 import numpy as np
 
 
-def board_to_packed(board: chess.Board):
+def board_to_packed(board: chess.Board) -> np.ndarray:
     """
     Converts a chess.Board to an int8 array representation (Size 69).
     0-63: Square contents
@@ -80,7 +80,7 @@ def packed_to_board(packed_array: np.ndarray) -> chess.Board:
     return board
 
 
-def packed_to_tensor(packed_array):
+def packed_to_tensor(packed_array: np.ndarray) -> np.ndarray:
     """
     Inflates packed array (69,) into Tensor (17, 8, 8).
     """
@@ -106,45 +106,97 @@ def packed_to_tensor(packed_array):
     return tensor
 
 
-def tensor_to_board(tensor):
+def tensor_to_board(tensor: np.ndarray) -> chess.Board:
     """Reconstructs a chess.Board from the (17, 8, 8) tensor representation"""
-
+    print(tensor.shape)
     board = chess.Board(None)
     board.clear()
+    board.turn = chess.WHITE
 
+    # 1. Piece Reconstruction
     for piece_index in range(12):
         positions = np.argwhere(tensor[piece_index] == 1)
-        for pos in positions.T:
+
+        for pos in positions:
             row, col = pos
             sq = row * 8 + col
+
             if piece_index < 6:
+                # Planes 0-5: White (Friendly)
                 piece = chess.Piece(piece_index + 1, chess.WHITE)
             else:
+                # Planes 6-11: Black (Enemy)
+                # Ex: Plane 6 (index 6) is Black Pawn. 6 - 5 = 1 (Pawn)
                 piece = chess.Piece(piece_index - 5, chess.BLACK)
+
             board.set_piece_at(sq, piece)
 
     castling_rights = chess.BB_EMPTY
-
-    if np.any(tensor[12] == 1):
-        castling_rights |= chess.BB_H1  # White King-side
-    if np.any(tensor[13] == 1):
-        castling_rights |= chess.BB_A1  # White Queen-side
-    if np.any(tensor[14] == 1):
-        castling_rights |= chess.BB_H8  # Black King-side
-    if np.any(tensor[15] == 1):
-        castling_rights |= chess.BB_A8  # Black Queen-side
+    if (tensor[12] == 1).any():
+        castling_rights |= chess.BB_H1
+    if (tensor[13] == 1).any():
+        castling_rights |= chess.BB_A1
+    if (tensor[14] == 1).any():
+        castling_rights |= chess.BB_H8
+    if (tensor[15] == 1).any():
+        castling_rights |= chess.BB_A8
 
     board.castling_rights = castling_rights
 
-    ep_positions = np.argwhere(tensor[16] == 1)
-    if ep_positions.size > 0:
-        row, col = ep_positions[0]
-        ep_sq = row * 8 + col
-        board.ep_square = ep_sq
+    # 3. En Passant Reconstruction
+    # CORRECTED LOGIC: nonzero returns a tuple of arrays (rows, cols)
+    # ep_rows, ep_cols = (tensor[16] == 1).nonzero()
+    enpassant_sq = (tensor[16] == 1).nonzero()
+
+    if len(enpassant_sq[0]) > 0:
+        ep_rows, ep_cols = enpassant_sq
+        ep_sq = ep_rows[0] * 8 + ep_cols[0]
+        board.ep_square = int(ep_sq)
     else:
         board.ep_square = None
 
     return board
+
+
+# def tensor_to_board(tensor):
+#     """Reconstructs a chess.Board from the (17, 8, 8) tensor representation"""
+#
+#     board = chess.Board(None)
+#     board.clear()
+#
+#     for piece_index in range(12):
+#         positions = np.argwhere(tensor[piece_index] == 1)
+#         for pos in positions.T:
+#             row, col = pos
+#             sq = row * 8 + col
+#             if piece_index < 6:
+#                 piece = chess.Piece(piece_index + 1, chess.WHITE)
+#             else:
+#                 piece = chess.Piece(piece_index - 5, chess.BLACK)
+#             board.set_piece_at(sq, piece)
+#
+#     castling_rights = chess.BB_EMPTY
+#
+#     if (tensor[12] == 1).any():
+#         castling_rights |= chess.BB_H1  # White King-side
+#     if (tensor[13] == 1).any():
+#         castling_rights |= chess.BB_A1  # White Queen-side
+#     if (tensor[14] == 1).any():
+#         castling_rights |= chess.BB_H8  # Black King-side
+#     if (tensor[15] == 1).any():
+#         castling_rights |= chess.BB_A8  # Black Queen-side
+#
+#     board.castling_rights = castling_rights
+#
+#     ep_positions = (tensor[16] == 1).nonzero()
+#     if len(ep_positions) > 0:
+#         row, col = ep_positions
+#         ep_sq = row * 8 + col
+#         board.ep_square = ep_sq
+#     else:
+#         board.ep_square = None
+#
+#     return board
 
 
 def clean_state_dict(state_dict):
