@@ -32,7 +32,6 @@ from beschess.data.embedding import (
 )
 
 TAG_NAMES = [
-    "Quiet",
     "MatingNet",
     "SpecialMove",
     "Promotion",
