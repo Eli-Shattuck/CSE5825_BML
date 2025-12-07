@@ -364,7 +364,9 @@ for param in model.parameters():
     param.requires_grad = True
 
 # Compile model
-model = torch.compile(model, mode="reduce-overhead")
+torch._dynamo.reset()
+print("Compiling model...")
+model = torch.compile(model, mode="reduce-overhead", dynamic=True)
 
 # AGGRESSIVE OPTIMIZER SETTINGS
 # 1. Higher LR for Backbone (1e-4, matching heads)
