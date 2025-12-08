@@ -48,7 +48,7 @@ torch.manual_seed(SEED)
 
 GRAD_CLIP = 1.0
 EPOCHS = 50
-MODEL_LR = 1e-4
+MODEL_LR = 1e-4 * 0.5
 LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096
@@ -173,7 +173,7 @@ loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
 
 optimizer = torch.optim.AdamW(
     [
-        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-2},
+        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
         {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )
