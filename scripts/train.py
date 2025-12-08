@@ -112,16 +112,19 @@ with open(CHECKPOINT_DIR / "test_indices.txt", "w") as f:
     for p_idx in p_test:
         f.write(f"p,{p_idx}\n")
 
-train_loader = DirectLoader(
+train_loader = DataLoader(
     dataset,
-    BalancedBatchSampler(
+    batch_sampler=BalancedBatchSampler(
         dataset,
         q_train,
         p_train,
         batch_size=BATCH_SIZE,
         steps_per_epoch=2000,
     ),
-    device=device,
+    num_workers=8,
+    pin_memory=True,
+    persistent_workers=True,
+    prefetch_factor=4,
 )
 
 VAL_BATCH_SIZE = 512
