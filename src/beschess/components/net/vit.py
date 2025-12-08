@@ -41,8 +41,8 @@ class MultiTaskViT(nn.Module):
         )
 
         self.metric_head = nn.Sequential(
-            # nn.Linear(embed_dim, out_dim, bias=False),
-            nn.Linear(embed_dim, out_dim),
+            nn.Linear(embed_dim, out_dim, bias=False),
+            # nn.Linear(embed_dim, out_dim),
         )
 
         self.classifier_head = nn.Sequential(
