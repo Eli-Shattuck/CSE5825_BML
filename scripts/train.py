@@ -62,15 +62,40 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 quiet_boards_file = DATA_DIR / "quiet_boards_preeval.npy"
+hard_negatives_file = DATA_DIR / "hard_negatives.npy"
 puzzle_boards_file = DATA_DIR / "boards_packed.npy"
 puzzle_labels_file = DATA_DIR / "tags_packed.npy"
 
-quiet_boards = np.load(quiet_boards_file, mmap_mode="r")
-puzzle_boards = np.load(puzzle_boards_file, mmap_mode="r")
-puzzle_labels = np.load(puzzle_labels_file, mmap_mode="r")
+quiet_boards = np.load(quiet_boards_file)
+puzzle_boards = np.load(puzzle_boards_file)
+puzzle_labels = np.load(puzzle_labels_file)
+
+try:
+    hard_negatives = np.load(hard_negatives_file)
+    print(f"Found {len(hard_negatives)} Hard Negatives.")
+
+    n_hard = len(hard_negatives)
+    n_quiet = len(quiet_boards)
+
+    if n_quiet > n_hard:
+        print(
+            f"Balancing: Downsampling Quiet Boards ({n_quiet}) to match Hard Negatives ({n_hard})..."
+        )
+        indices = np.random.choice(n_quiet, n_hard, replace=False)
+        quiet_subset = quiet_boards[indices]
+        negatives_combined = np.concatenate([quiet_subset, hard_negatives], axis=0)
+    else:
+        print(
+            f"Balancing: Using all available boards (Quiet: {n_quiet}, Hard: {n_hard})."
+        )
+        negatives_combined = np.concatenate([quiet_boards, hard_negatives], axis=0)
+
+except FileNotFoundError:
+    print("WARNING: hard_negatives.npy not found! Training on quiet boards only.")
+    negatives_combined = quiet_boards
 
 dataset = PuzzleDataset(
-    quiet_boards=quiet_boards,
+    quiet_boards=negatives_combined,
     puzzle_boards=puzzle_boards,
     puzzle_labels=puzzle_labels,
 )
