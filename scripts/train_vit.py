@@ -173,7 +173,7 @@ loss_fn_binary = nn.BCEWithLogitsLoss().to(device)
 
 optimizer = torch.optim.AdamW(
     [
-        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-4},
+        {"params": model.parameters(), "lr": MODEL_LR, "weight_decay": 1e-2},
         {"params": loss_fn_emb.parameters(), "lr": LOSS_LR, "weight_decay": 0},
     ]
 )
