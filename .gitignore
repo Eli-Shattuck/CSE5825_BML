@@ -148,6 +148,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+**/.venv
+recommender/.pmf.venv2
+recommender/.pmf.venv
 
 # Spyder project settings
 .spyderproject

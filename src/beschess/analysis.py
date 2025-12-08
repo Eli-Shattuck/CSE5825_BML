@@ -37,8 +37,9 @@ def is_puzzle(
     stockfish: StockFish,
     board: chess.Board,
     amax_cp_diff: int,
+    return_score: bool = False
 ):
-    if stockfish.config.depth is None or stockfish.config.nodes is None:
+    if stockfish.config.depth is None and stockfish.config.nodes is None:
         raise ValueError("Either depth or nodes must be specified in StockFishConfig.")
 
     if stockfish.config.depth is not None:
@@ -55,6 +56,7 @@ def is_puzzle(
     )
 
     if len(info) < 2:
+        if return_score: return False, None, None, None
         return False
 
     if "score" not in info[0] or "score" not in info[1]:
@@ -65,7 +67,12 @@ def is_puzzle(
 
     logging.info(f"Score 1: {s1}, Score 2: {s2}")
 
-    return abs(s2 - s1) >= amax_cp_diff
+    score = abs(s2 - s1)
+
+    if return_score: return score >= amax_cp_diff, score, s1, s2
+
+    return score >= amax_cp_diff
+
 
 
 # --- LEGACY STOCKFISH ANALYSIS FUNCTION ---
