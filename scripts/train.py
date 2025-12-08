@@ -31,14 +31,13 @@ from beschess.data.embedding import (
 )
 
 TAG_NAMES = [
-    "LinearAttack",
-    "DoubleAttack",
     "MatingNet",
-    "Overload",
-    "Displacement",
-    "Sacrifice",
-    "EndgameTactic",
-    "PieceEndgame",
+    "SpecialMove",
+    "Promotion",
+    "DoubleAttack",
+    "LinearAttack",
+    "Punishment",
+    "ForcingMove",
 ]
 
 SEED = 42
