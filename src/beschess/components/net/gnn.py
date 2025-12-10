@@ -10,7 +10,7 @@ from .block import GATLayer
 class MultiTaskGAT(nn.Module):
     def __init__(
         self,
-        in_channels: int = 17,
+        in_channels: int = 20,
         hidden_dim: int = 128,
         out_dim: int = 128,
         depth: int = 4,

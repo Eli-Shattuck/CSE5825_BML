@@ -72,7 +72,7 @@ def process_batch(fens):
 
 
 def mine_hard_negatives_multiprocess(zstd_json_path, output_path):
-    boards_packed = np.zeros((TRUE_TOTAL_SAMPLES, 69), dtype=np.int8)
+    boards_packed = np.zeros((TRUE_TOTAL_SAMPLES, 133), dtype=np.uint8)
 
     current_samples = 0
     seen_hashes = set()
@@ -104,7 +104,6 @@ def mine_hard_negatives_multiprocess(zstd_json_path, output_path):
                 except ValueError:
                     continue
 
-                # --- FAST FILTERS ---
                 evals_list = data.get("evals", [])
                 if not evals_list:
                     continue
@@ -119,19 +118,14 @@ def mine_hard_negatives_multiprocess(zstd_json_path, output_path):
 
                 raw_score = calc_score(pvs[0])
 
-                # --- CRITICAL FIX: NORMALIZE SCORE ---
-                # FEN format: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-                # The second part is 'w' or 'b'.
                 fen = data["fen"]
-                is_white_turn = " w " in fen  # Fast check for turn
+                is_white_turn = " w " in fen
 
                 if is_white_turn:
                     perspective_score = raw_score
                 else:
                     perspective_score = -raw_score
 
-                # Now we check if the ACTIVE player is winning
-                # If perspective_score is high, it's a puzzle (or easy win). Skip it.
                 if perspective_score > MAX_CP_SCORE:
                     continue
 
@@ -151,7 +145,6 @@ def mine_hard_negatives_multiprocess(zstd_json_path, output_path):
                     continue
                 seen_hashes.add(fen_hash)
 
-                # --- BATCHING ---
                 batch_fens.append(fen)
                 batch_indices.append(piece_count)
 
@@ -161,16 +154,12 @@ def mine_hard_negatives_multiprocess(zstd_json_path, output_path):
                     batch_fens = []
                     batch_indices = []
 
-                # --- RESULT COLLECTION ---
-                # Check results periodically to free RAM and check completion
                 if len(futures) > 50:
                     pending = []
                     for fut, p_counts in futures:
                         if fut.done():
                             try:
-                                results = (
-                                    fut.result()
-                                )  # This re-raises worker exceptions!
+                                results = fut.result()
                             except Exception as e:
                                 print(f"Worker Error: {e}")
                                 results = [None] * len(p_counts)
@@ -186,22 +175,18 @@ def mine_hard_negatives_multiprocess(zstd_json_path, output_path):
 
                                         if current_samples >= TRUE_TOTAL_SAMPLES:
                                             is_finished = True
-                                            break  # Break inner loop
+                                            break
 
                             if is_finished:
-                                break  # Break outer loop
+                                break
                         else:
                             pending.append((fut, p_counts))
                     futures = pending
 
-            # --- PROCESS REMAINING BATCHES (If not finished) ---
             if not is_finished and batch_fens:
                 future = executor.submit(process_batch, batch_fens)
                 futures.append((future, batch_indices))
 
-            # --- DRAIN ALL FUTURES ---
-            # Even if finished, we should cancel pending or just ignore them.
-            # But simpler to just drain until we are sure.
             if not is_finished:
                 for fut, p_counts in futures:
                     try:

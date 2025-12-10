@@ -144,7 +144,7 @@ class DirectLoader:
         n_total = len(dataset)
 
         self.all_boards = torch.empty(
-            (n_total, 17, 8, 8), dtype=torch.float32, device=device
+            (n_total, 20, 8, 8), dtype=torch.float32, device=device
         )
         self.all_labels = torch.empty(
             (n_total, N_PUZZLE_LABELS + 1), dtype=torch.float32, device=device

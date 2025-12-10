@@ -65,75 +65,6 @@ TAG_MAPPING = {
     "intermezzo": "ForcingMove",
     "capturingDefender": "ForcingMove",
 }
-# CORE_CLASSES = [
-#     "LinearAttack",
-#     "DoubleAttack",
-#     "MatingNet",
-#     "Overload",
-#     "Displacement",
-#     "Sacrifice",
-#     "EndgameTactic",
-#     "PieceEndgame",
-# ]
-#
-# # Merge classes into core clusters
-# TAG_MAPPING = {
-#     # Single Piece Attacks
-#     "pin": "LinearAttack",
-#     "skewer": "LinearAttack",
-#     "xRayAttack": "LinearAttack",
-#     # Piece Attacks on Multiple Targets
-#     "fork": "DoubleAttack",
-#     "discoveredAttack": "DoubleAttack",
-#     "doubleCheck": "DoubleAttack",
-#     # Matting Patterns
-#     "mate": "MatingNet",
-#     "mateIn1": "MatingNet",
-#     "mateIn2": "MatingNet",
-#     "mateIn3": "MatingNet",
-#     "mateIn4": "MatingNet",
-#     "mateIn5": "MatingNet",
-#     "anastasiaMate": "MatingNet",
-#     "arabianMate": "MatingNet",
-#     "backRankMate": "MatingNet",
-#     "balestraMate": "MatingNet",
-#     "blindSwineMate": "MatingNet",
-#     "bodenMate": "MatingNet",
-#     "cornerMate": "MatingNet",
-#     "doubleBishopMate": "MatingNet",
-#     "dovetailMate": "MatingNet",
-#     "hookMate": "MatingNet",
-#     "killBoxMate": "MatingNet",
-#     "smotheredMate": "MatingNet",
-#     "triangleMate": "MatingNet",
-#     "vukovicMate": "MatingNet",
-#     # Forcing Opponent to Defend Multiple Threats
-#     "attraction": "Overload",
-#     "trappedPiece": "Overload",
-#     "hangingPiece": "Overload",
-#     "exposedKing": "Overload",
-#     # Positional/Tactical Gain by Moving Pieces but not Capturing
-#     "deflection": "Displacement",
-#     "interference": "Displacement",
-#     # Giving up Material for Positional/Tactical Gain
-#     "sacrifice": "Sacrifice",
-#     "clearance": "Sacrifice",
-#     "intermezzo": "Sacrifice",
-#     "capturingDefender": "Sacrifice",
-#     # Tactics that often appear in endgames
-#     "promotion": "EndgameTactic",
-#     "underPromotion": "EndgameTactic",
-#     "zugzwang": "EndgameTactic",
-#     "advancedPawn": "EndgameTactic",
-#     "enPassant": "EndgameTactic",
-#     # Endgame Types
-#     "pawnEndgame": "PieceEndgame",
-#     "rookEndgame": "PieceEndgame",
-#     "bishopEndgame": "PieceEndgame",
-#     "knightEndgame": "PieceEndgame",
-#     "queenEndgame": "PieceEndgame",
-#     "queenRookEndgame": "PieceEndgame",
-# }
 
 
 def clean_and_map_tags(tag_str):
@@ -159,32 +90,27 @@ def main():
     print(f"Mapping Tags to {len(CORE_CLASSES)} Core Clusters...")
     df["clean_tags"] = df["Themes"].apply(clean_and_map_tags)
 
-    # Filter empty rows
     initial_len = len(df)
     df = df[df["clean_tags"].map(len) > 0].reset_index(drop=True)
     print(
         f"Dropped {initial_len - len(df)} puzzles that did not fit the Core Taxonomy."
     )
 
-    # Encode
     mlb = MultiLabelBinarizer(classes=CORE_CLASSES)
-    tags_matrix = mlb.fit_transform(df["clean_tags"]).astype(np.int8)
+    tags_matrix = mlb.fit_transform(df["clean_tags"]).astype(np.uint8)
 
-    # Save Class Names
     np.save(DATA_PATH / "processed" / "tag_classes.npy", mlb.classes_)
     print(f"Classes: {mlb.classes_}")
 
     print("Bit-Packing Boards (Int8)...")
     num_samples = len(df)
-    # 69 bytes = 64 squares + 5 meta
-    boards_packed = np.zeros((num_samples, 69), dtype=np.int8)
+    boards_packed = np.zeros((num_samples, 133), dtype=np.int8)
 
     for i, (fen, move_str) in tqdm(
         enumerate(zip(df["FEN"], df["Moves"])), total=num_samples
     ):
         board = chess.Board(fen)
         try:
-            # Apply first move to get the position the user actually sees/solves
             first_move_uci = move_str.split(" ")[0]
             board.push_uci(first_move_uci)
         except:

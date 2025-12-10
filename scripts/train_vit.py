@@ -153,7 +153,7 @@ val_puzzle_loader = DataLoader(
 )
 
 model = MultiTaskViT(
-    in_channels=17,
+    in_channels=20,
     embed_dim=256,
     num_heads=8,
     depth=6,

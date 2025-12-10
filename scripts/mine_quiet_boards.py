@@ -21,7 +21,7 @@ def mine_quiet_boards(pgn_path, output_path, total=None):
     try:
         stockfish = StockFish(StockFishConfig(nodes=5000, threads=16))
 
-        boards_packed = np.zeros((TARGET_SAMPLES, 64), dtype=np.int8)
+        boards_packed = np.zeros((TARGET_SAMPLES, 64), dtype=np.uint8)
         boards_sampled = 0
 
         print("Opening PGN...")

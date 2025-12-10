@@ -12,7 +12,7 @@ from .block import InterpretableTransformerEncoderLayer
 class MultiTaskViT(nn.Module):
     def __init__(
         self,
-        in_channels: int = 17,
+        in_channels: int = 20,
         embed_dim: int = 256,
         num_heads: int = 8,
         depth: int = 6,
@@ -76,7 +76,7 @@ class MultiTaskViT(nn.Module):
 class MultiTaskViT2D(nn.Module):
     def __init__(
         self,
-        in_channels: int = 17,
+        in_channels: int = 20,
         embed_dim: int = 256,
         num_heads: int = 8,
         depth: int = 6,
@@ -142,7 +142,7 @@ class MultiTaskViT2D(nn.Module):
 
 
 def get_interpretable_vit(
-    in_channels: int = 17,
+    in_channels: int = 20,
     embed_dim: int = 256,
     num_heads: int = 8,
     depth: int = 6,
