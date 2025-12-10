@@ -160,7 +160,7 @@ model = MultiTaskViT(
     out_dim=EMBEDDING_DIM,
 ).to(device)
 
-model = torch.compile(model, mode="max-autotune")
+model = torch.compile(model, mode="reduce-overhead")
 
 loss_fn_emb = ProxyAnchor(
     n_classes=len(TAG_NAMES),
