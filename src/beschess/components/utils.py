@@ -16,22 +16,15 @@ from beschess.data.embedding import DirectLoader
 from .loss import ProxyAnchor
 
 TAG_NAMES = [
-    "quiet",
-    "bishopEndgame",
-    "diagonalMate",
-    "discoveredAttack",
-    "fork",
-    "knightEndgame",
-    "knightMate",
-    "orthogonalMate",
-    "pawnEndgame",
-    "pin",
-    "queenEndgame",
-    "queenMate",
-    "queenRookEndgame",
-    "rookEndgame",
-    "skewer",
-    "xRayAttack",
+    "Quiet",
+    "LinearAttack",
+    "DoubleAttack",
+    "MatingNet",
+    "Overload",
+    "Displacement",
+    "Sacrifice",
+    "EndgameTactic",
+    "PieceEndgame",
 ]
 
 
@@ -566,6 +559,7 @@ def lr_range_test(
     def lr_lambda(iteration):
         return (end_lr / start_lr) ** (iteration / num_iters)
 
+    loss_fn_bce = nn.BCEWithLogitsLoss()
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     model.train()
@@ -585,11 +579,17 @@ def lr_range_test(
 
         inputs, targets = inputs.to(device), targets.to(device)
 
+        is_puzzle_mask = targets[:, 0] == 0
+        puzzle_inputs = inputs[is_puzzle_mask]
+        puzzle_targets = targets[is_puzzle_mask][:, 1:]
+
         optimizer.zero_grad()
-        outputs = model(inputs)
-        if type(outputs) is tuple:
-            outputs = outputs[0]
-        loss = loss_fn(outputs, targets)
+        embeddings, puzzle_logits = model(inputs)
+
+        puzzle_embeddings = embeddings[is_puzzle_mask]
+        loss_emb = loss_fn(puzzle_embeddings, puzzle_targets)
+        loss_bce = loss_fn_bce(puzzle_logits, is_puzzle_mask.float().unsqueeze(1))
+        loss = loss_emb + 5.0 * loss_bce
 
         current_loss = loss.item()
 
@@ -830,43 +830,29 @@ def compute_geometry_metrics(
 ):
     model.eval()
 
-    # 1. Get a batch of embeddings and labels
-    # Just grab one batch for speed, or loop for full validation
     boards, labels = next(iter(val_loader))
     boards, labels = boards.to(device), labels.to(device)
 
     with torch.no_grad():
-        embeddings, _ = model(boards)  # Get normalized embeddings
+        embeddings, _ = model(boards)
 
-    # 2. Calculate Pairwise Distances of Embeddings
-    # Shape: (batch, batch)
     dists = 1.0 - torch.mm(embeddings, embeddings.t())
 
-    # Create masks for Pos/Neg pairs (handling multilabel if needed)
-    # Simple single-label approximation for speed:
-    # labels_equal = labels.unsqueeze(0) == labels.unsqueeze(1)
-
-    # Better Jaccard approximation for your Multilabel case:
     intersection = torch.mm(labels.float(), labels.float().t())
     union = labels.sum(1, keepdim=True) + labels.sum(1, keepdim=True).t() - intersection
     jaccard = intersection / (union + 1e-8)
 
-    # Masks
-    pos_mask = jaccard > 0.9  # "Exact Match"
-    neg_mask = jaccard < 0.1  # "Disjoint"
+    pos_mask = jaccard > 0.9
+    neg_mask = jaccard < 0.1
 
     avg_pos_dist = dists[pos_mask].mean().item()
     avg_neg_dist = dists[neg_mask].mean().item()
 
-    # 3. Calculate Proxy Spread (The "Anchor Health")
-    # Proxy Anchor loss stores proxies in 'loss_fn.proxies'
     if hasattr(loss_fn, "proxies"):
         proxies = loss_fn.proxies
-        # Normalize proxies to check angular distance
         proxies_norm = torch.nn.functional.normalize(proxies, p=2, dim=1)
         proxy_dists = 1.0 - torch.mm(proxies_norm, proxies_norm.t())
 
-        # Mask out self-distance (diagonal is always 0)
         mask = ~torch.eye(proxy_dists.shape[0], dtype=bool, device=device)
         avg_proxy_spread = proxy_dists[mask].mean().item()
     else:

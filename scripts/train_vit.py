@@ -48,7 +48,7 @@ torch.manual_seed(SEED)
 
 GRAD_CLIP = 1.0
 EPOCHS = 50
-MODEL_LR = 1e-4 * 0.5
+MODEL_LR = 5e-3
 LOSS_LR = 1e-2
 EMBEDDING_DIM = 128
 BATCH_SIZE = 4096

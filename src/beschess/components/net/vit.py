@@ -22,8 +22,8 @@ class MultiTaskViT(nn.Module):
 
         self.patch_proj = nn.Linear(in_channels, embed_dim)
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.randn(1, 65, embed_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, 65, embed_dim))
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -42,7 +42,6 @@ class MultiTaskViT(nn.Module):
 
         self.metric_head = nn.Sequential(
             nn.Linear(embed_dim, out_dim, bias=False),
-            # nn.Linear(embed_dim, out_dim),
         )
 
         self.classifier_head = nn.Sequential(
@@ -50,6 +49,21 @@ class MultiTaskViT(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(64, 1),
         )
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.weight, 1.0)
+            nn.init.constant_(m.bias, 0)
+
+        nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
 
     def forward(self, x):
         b, _, _, _ = x.shape
