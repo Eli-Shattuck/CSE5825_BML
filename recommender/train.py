@@ -50,10 +50,10 @@ eval_data = DatasetPure.build_evalset(eval_data=eval_df)
 model = SVD(
     task='rating',
     data_info=data_info,
-    embed_size=32,
-    lr=0.1,
+    embed_size=64,
+    lr=0.01,
     lr_decay=True,
-    reg=0.001,
+    reg=0.0001,
     n_epochs=100,
     seed=42,
     lower_upper_bound=(mn, mx)
@@ -82,9 +82,12 @@ metrics = evaluate(
 
 print(f'FINAL | eval rmse: {metrics["rmse"]} eval mae: {metrics["mae"]}')
 
+path=f"../checkpoints/checkpoint_final_{now}"
+name="puzzle_recommender"
 model.save(
-    path=f"../checkpoints/checkpoint_final_{now}", 
-    model_name="puzzle_recommender", 
+    path=path, 
+    model_name=name, 
     manual=True,
     inference_only=True
 )
+data_info.save(path=path, model_name=name)
